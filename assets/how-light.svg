@@ -1,66 +1,58 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 452" width="1000" height="452" role="img" aria-label="Step by step makes 16 trips to the AI and takes 16.6 seconds. Foresight makes one and takes 1.8 seconds." font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif">
-<title>Step by step makes 16 trips to the AI and takes 16.6 seconds. Foresight makes one and takes 1.8 seconds.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 452" width="1000" height="452" role="img" aria-label="Step by step looks at the page 13 times and takes 14.4 seconds. Foresight runs one plan and takes 3.3 seconds." font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif">
+<title>Step by step looks at the page 13 times and takes 14.4 seconds. Foresight runs one plan and takes 3.3 seconds.</title>
 <text x="40" y="48" font-size="20" font-weight="700" fill="#1f2328" text-anchor="start" >Step by step</text>
 <text x="193.2" y="48" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >the AI is asked before every action</text>
 <text x="124" y="89" font-size="15" font-weight="600" fill="#59636e" text-anchor="end" >AI</text>
 <line x1="138" y1="84" x2="938" y2="84" stroke="#d1d9e0" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"/>
 <text x="124" y="157" font-size="15" font-weight="600" fill="#59636e" text-anchor="end" >Page</text>
 <line x1="138" y1="152" x2="938" y2="152" stroke="#d1d9e0" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"/>
-<polyline points="150.0,84 174.4,152 198.8,84 223.1,152 247.5,84 271.9,152 296.2,84 320.6,152 345.0,84 369.4,152 393.8,84 418.1,152 442.5,84 466.9,152 491.2,84 515.6,152 540.0,84 564.4,152 588.8,84 613.1,152 637.5,84 661.9,152 686.2,84 710.6,152 735.0,84 759.4,152 783.8,84 808.1,152 832.5,84 856.9,152 881.2,84 905.6,152 930.0,84" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="174.4" cy="152" r="5" fill="#eb6834"/>
-<circle cx="223.1" cy="152" r="5" fill="#eb6834"/>
-<circle cx="271.9" cy="152" r="5" fill="#eb6834"/>
-<circle cx="320.6" cy="152" r="5" fill="#eb6834"/>
-<circle cx="369.4" cy="152" r="5" fill="#eb6834"/>
-<circle cx="418.1" cy="152" r="5" fill="#eb6834"/>
-<circle cx="466.9" cy="152" r="5" fill="#eb6834"/>
-<circle cx="515.6" cy="152" r="5" fill="#eb6834"/>
-<circle cx="564.4" cy="152" r="5" fill="#eb6834"/>
-<circle cx="613.1" cy="152" r="5" fill="#eb6834"/>
-<circle cx="661.9" cy="152" r="5" fill="#eb6834"/>
-<circle cx="710.6" cy="152" r="5" fill="#eb6834"/>
-<circle cx="759.4" cy="152" r="5" fill="#eb6834"/>
-<circle cx="808.1" cy="152" r="5" fill="#eb6834"/>
-<circle cx="856.9" cy="152" r="5" fill="#eb6834"/>
-<circle cx="905.6" cy="152" r="5" fill="#eb6834"/>
+<polyline points="150.0,84 180.0,152 210.0,84 240.0,152 270.0,84 300.0,152 330.0,84 360.0,152 390.0,84 420.0,152 450.0,84 480.0,152 510.0,84 540.0,152 570.0,84 600.0,152 630.0,84 660.0,152 690.0,84 720.0,152 750.0,84 780.0,152 810.0,84 840.0,152 870.0,84 900.0,152 930.0,84" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="180.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="240.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="300.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="360.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="420.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="480.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="540.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="600.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="660.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="720.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="780.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="840.0" cy="152" r="5" fill="#eb6834"/>
+<circle cx="900.0" cy="152" r="5" fill="#eb6834"/>
 <circle cx="930.0" cy="84" r="6" fill="#eb6834"/>
-<text x="930.0" y="68" font-size="17" font-weight="700" fill="#1f2328" text-anchor="end" >16.6 s</text>
+<text x="930.0" y="68" font-size="17" font-weight="700" fill="#1f2328" text-anchor="end" >14.4 s</text>
 <text x="40" y="236" font-size="20" font-weight="700" fill="#1f2328" text-anchor="start" >Foresight</text>
 <text x="158.39999999999998" y="236" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >the AI writes the whole plan; the engine runs and checks it</text>
 <text x="124" y="277" font-size="15" font-weight="600" fill="#59636e" text-anchor="end" >AI</text>
 <line x1="138" y1="272" x2="938" y2="272" stroke="#d1d9e0" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"/>
 <text x="124" y="345" font-size="15" font-weight="600" fill="#59636e" text-anchor="end" >Page</text>
 <line x1="138" y1="340" x2="938" y2="340" stroke="#d1d9e0" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"/>
-<path d="M150 272 L160 340 L224.6 340 L234.6 272" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M150 272 L160 340 L318.8 340 L328.8 272" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
 <line x1="164.0" y1="334" x2="164.0" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="167.8" y1="334" x2="167.8" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="171.5" y1="334" x2="171.5" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="175.3" y1="334" x2="175.3" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="179.1" y1="334" x2="179.1" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="182.9" y1="334" x2="182.9" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="186.6" y1="334" x2="186.6" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="190.4" y1="334" x2="190.4" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="194.2" y1="334" x2="194.2" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="197.9" y1="334" x2="197.9" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="176.6" y1="334" x2="176.6" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="189.1" y1="334" x2="189.1" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
 <line x1="201.7" y1="334" x2="201.7" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="205.5" y1="334" x2="205.5" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="209.3" y1="334" x2="209.3" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="213.0" y1="334" x2="213.0" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="216.8" y1="334" x2="216.8" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<line x1="220.6" y1="334" x2="220.6" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
-<circle cx="234.6" cy="272" r="6" fill="#2a78d6"/>
-<text x="250.57831325301203" y="278" font-size="17" font-weight="700" fill="#1f2328" text-anchor="start" >1.8 s</text>
-<text x="330.578313253012" y="301" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >16 steps, each one checked inside the page.</text>
-<text x="330.578313253012" y="325" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >It goes back to the AI only when a step is not what the plan expected.</text>
+<line x1="214.2" y1="334" x2="214.2" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="226.8" y1="334" x2="226.8" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="239.4" y1="334" x2="239.4" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="251.9" y1="334" x2="251.9" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="264.5" y1="334" x2="264.5" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="277.1" y1="334" x2="277.1" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="289.6" y1="334" x2="289.6" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="302.2" y1="334" x2="302.2" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="314.8" y1="334" x2="314.8" y2="346" stroke="#2a78d6" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="328.8" cy="272" r="6" fill="#2a78d6"/>
+<text x="344.75" y="278" font-size="17" font-weight="700" fill="#1f2328" text-anchor="start" >3.3 s</text>
+<text x="424.75" y="301" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >13 steps, each one checked inside the page.</text>
+<text x="424.75" y="325" font-size="16" font-weight="400" fill="#59636e" text-anchor="start" >It goes back to the AI only when a step is not what the plan expected.</text>
 <line x1="150" y1="412" x2="930" y2="412" stroke="#d1d9e0" stroke-width="1.5"/>
 <line x1="150.0" y1="412" x2="150.0" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
 <text x="150.0" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >0 s</text>
-<line x1="338.0" y1="412" x2="338.0" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
-<text x="338.0" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >4 s</text>
-<line x1="525.9" y1="412" x2="525.9" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
-<text x="525.9" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >8 s</text>
-<line x1="713.9" y1="412" x2="713.9" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
-<text x="713.9" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >12 s</text>
-<line x1="901.8" y1="412" x2="901.8" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
-<text x="901.8" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >16 s</text>
+<line x1="366.7" y1="412" x2="366.7" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
+<text x="366.7" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >4 s</text>
+<line x1="583.3" y1="412" x2="583.3" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
+<text x="583.3" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >8 s</text>
+<line x1="800.0" y1="412" x2="800.0" y2="418" stroke="#d1d9e0" stroke-width="1.5"/>
+<text x="800.0" y="436" font-size="14" font-weight="400" fill="#59636e" text-anchor="middle" >12 s</text>
 </svg>

@@ -1,5 +1,5 @@
 // Shared benchmark harness. Every page times itself from navigation start to a validated finish,
-// so every executor (Claude step-by-step, Claude batch, Playwright, Foresight) is measured the same way.
+// so every executor (step-by-step agent, Playwright script, Foresight) is measured the same way.
 (() => {
   const qs = new URLSearchParams(location.search);
   const scenario = document.body.dataset.scenario;

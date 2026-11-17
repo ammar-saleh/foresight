@@ -7,3 +7,6 @@ results/
 engine/runtime.prev.js
 bench/fresh-all.sh
 *.log
+bench/live.mjs
+bench/report.mjs
+bench/fresh.mjs

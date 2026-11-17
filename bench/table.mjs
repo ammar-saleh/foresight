@@ -1,4 +1,4 @@
-// Turns the benchmark result files into the markdown tables used in RESULTS.md.  node bench/table.mjs [--write]
+// Prints the benchmark result files (from bench/run.mjs) as markdown tables.  node bench/table.mjs
 import fs from 'node:fs';
 const jl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const SC = ['long-form', 'autocomplete', 'late-modal', 'wizard', 'drift', 'grid'];
