@@ -6,6 +6,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ammar-saleh/foresight/actions/workflows/test.yml"><img src="https://github.com/ammar-saleh/foresight/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2a78d6" alt="MIT license"></a>
+</p>
+
+<p align="center">
   <a href="#try-it">Try it</a> ·
   <a href="GUIDE.md">Guide</a> ·
   <a href="RESULTS.md">Test results</a>
