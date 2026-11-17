@@ -20,7 +20,7 @@ the page, checks every step as it goes, and stops the moment something is not wh
 The AI is asked again only when there is a real question.
 
 <p align="center">
-  <img src="assets/demo.gif" alt="The same form filled two ways. Step by step takes 16.7 seconds, Foresight takes 1.8 seconds." width="880">
+  <img src="assets/demo.gif" alt="The same form filled two ways. Step by step takes 16.7 seconds, Foresight takes 1.8 seconds." width="760">
 </p>
 <p align="center"><sub>A real recording. Both sides fill the same 16-field form through the same simulated remote browser, and the page times itself.</sub></p>
 
@@ -69,8 +69,8 @@ Those numbers are the engine alone. With a real AI doing the thinking, on real w
 
 | Task | Foresight | Step by step |
 |---|---|---|
-| Demo shop: open a category, pick a product, add it to the cart, read the total | 14 s, 2 calls | 43 s, 10 calls |
-| Practice form: 13 fields with a date picker and custom dropdowns, submit, read it back | 20 s, 2 calls | 64 s |
+| Demo shop: find a product, add it to the cart, read the total | 14 s, 2 calls | 43 s, 10 calls |
+| Practice form: 13 fields, a date picker, custom dropdowns | 20 s, 2 calls | 64 s |
 
 ## Fast, and careful
 
