@@ -1,0 +1,1 @@
+{"steps": [{"fill": "What needs to be done?", "value": "Call Layla"}, {"keys": "Enter", "expect": {"text": "1 item left"}}, {"dblclick": "Call Layla"}, {"keys": "Control+A"}, {"type": "Call Layla Haddad"}, {"keys": "Enter", "expect": {"text": "Call Layla Haddad"}}]}

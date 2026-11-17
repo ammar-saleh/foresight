@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" width="1000" height="470" role="img" aria-label="Time to finish four tasks through a remote browser: step-by-step agent, hand-written script and Foresight." font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif">
+<title>Time to finish four tasks through a remote browser: step-by-step agent, hand-written script and Foresight.</title>
+<rect x="230" y="26" width="14" height="14" rx="4" fill="#d95926"/>
+<text x="252" y="38" font-size="16" font-weight="500" fill="#f0f6fc" text-anchor="start" >Step-by-step agent</text>
+<rect x="435.6" y="26" width="14" height="14" rx="4" fill="#199e70"/>
+<text x="457.6" y="38" font-size="16" font-weight="500" fill="#f0f6fc" text-anchor="start" >Hand-written script</text>
+<rect x="650.4" y="26" width="14" height="14" rx="4" fill="#3987e5"/>
+<text x="672.4" y="38" font-size="16" font-weight="500" fill="#f0f6fc" text-anchor="start" >Foresight</text>
+<line x1="230.0" y1="68" x2="230.0" y2="424" stroke="#3d444d" stroke-width="1" />
+<text x="230.0" y="448" font-size="14" font-weight="400" fill="#9198a1" text-anchor="middle" >0 s</text>
+<line x1="369.6" y1="68" x2="369.6" y2="424" stroke="#3d444d" stroke-width="1" stroke-dasharray="2 5"/>
+<text x="369.6" y="448" font-size="14" font-weight="400" fill="#9198a1" text-anchor="middle" >5 s</text>
+<line x1="509.2" y1="68" x2="509.2" y2="424" stroke="#3d444d" stroke-width="1" stroke-dasharray="2 5"/>
+<text x="509.2" y="448" font-size="14" font-weight="400" fill="#9198a1" text-anchor="middle" >10 s</text>
+<line x1="648.8" y1="68" x2="648.8" y2="424" stroke="#3d444d" stroke-width="1" stroke-dasharray="2 5"/>
+<text x="648.8" y="448" font-size="14" font-weight="400" fill="#9198a1" text-anchor="middle" >15 s</text>
+<line x1="788.3" y1="68" x2="788.3" y2="424" stroke="#3d444d" stroke-width="1" stroke-dasharray="2 5"/>
+<text x="788.3" y="448" font-size="14" font-weight="400" fill="#9198a1" text-anchor="middle" >20 s</text>
+<text x="212" y="104" font-size="17" font-weight="600" fill="#f0f6fc" text-anchor="end" >Sign-up form</text>
+<text x="212" y="124" font-size="14" font-weight="400" fill="#9198a1" text-anchor="end" >16 fields</text>
+<path d="M230 78 h506.9 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-506.9 z" fill="#d95926"/>
+<text x="748.9" y="91" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >18.3 s</text>
+<path d="M230 100 h188.6 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-188.6 z" fill="#199e70"/>
+<text x="430.6" y="113" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >6.9 s</text>
+<path d="M230 122 h49.0 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-49.0 z" fill="#3987e5"/>
+<text x="291.0" y="135" font-size="15" font-weight="700" fill="#f0f6fc" text-anchor="start" >1.9 s</text>
+<text x="212" y="192" font-size="17" font-weight="600" fill="#f0f6fc" text-anchor="end" >Spreadsheet grid</text>
+<text x="212" y="212" font-size="14" font-weight="400" fill="#9198a1" text-anchor="end" >20 cells</text>
+<path d="M230 166 h604.6 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-604.6 z" fill="#d95926"/>
+<text x="846.6" y="179" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >21.8 s</text>
+<path d="M230 188 h216.5 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-216.5 z" fill="#199e70"/>
+<text x="458.5" y="201" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >7.9 s</text>
+<path d="M230 210 h51.8 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-51.8 z" fill="#3987e5"/>
+<text x="293.8" y="223" font-size="15" font-weight="700" fill="#f0f6fc" text-anchor="start" >2.0 s</text>
+<text x="212" y="280" font-size="17" font-weight="600" fill="#f0f6fc" text-anchor="end" >Checkout</text>
+<text x="212" y="300" font-size="14" font-weight="400" fill="#9198a1" text-anchor="end" >3 screens</text>
+<path d="M230 254 h484.5 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-484.5 z" fill="#d95926"/>
+<text x="726.5" y="267" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >17.5 s</text>
+<path d="M230 276 h233.3 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-233.3 z" fill="#199e70"/>
+<text x="475.3" y="289" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >8.5 s</text>
+<path d="M230 298 h116.0 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-116.0 z" fill="#3987e5"/>
+<text x="358.0" y="311" font-size="15" font-weight="700" fill="#f0f6fc" text-anchor="start" >4.3 s</text>
+<text x="212" y="368" font-size="17" font-weight="600" fill="#f0f6fc" text-anchor="end" >Flight search</text>
+<text x="212" y="388" font-size="14" font-weight="400" fill="#9198a1" text-anchor="end" >with autocomplete</text>
+<path d="M230 342 h303.1 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-303.1 z" fill="#d95926"/>
+<text x="545.1" y="355" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >11.0 s</text>
+<path d="M230 364 h177.5 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-177.5 z" fill="#199e70"/>
+<text x="419.5" y="377" font-size="15" font-weight="400" fill="#f0f6fc" text-anchor="start" >6.5 s</text>
+<path d="M230 386 h85.3 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-85.3 z" fill="#3987e5"/>
+<text x="327.3" y="399" font-size="15" font-weight="700" fill="#f0f6fc" text-anchor="start" >3.2 s</text>
+</svg>

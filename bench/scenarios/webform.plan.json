@@ -1,0 +1,12 @@
+{"steps":[
+{"fill":"Text input","value":"Layla"},
+{"fill":"Textarea","value":"Speculative run test."},
+{"select":"Dropdown (select)","value":"Two"},
+{"fill":"Dropdown (datalist)","value":"Seattle"},
+{"check":"Default checkbox"},
+{"radio":"my-radio","value":"Default radio"},
+{"fill":"Color picker","value":"#ff0000"},
+{"fill":"Date picker","value":"12/20/2026"},
+{"fill":"Example range","value":"8"},
+{"click":"Submit","risk":"irreversible","expect":{"text":"Received","timeout":10000}}
+]}

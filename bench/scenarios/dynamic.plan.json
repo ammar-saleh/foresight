@@ -1,0 +1,5 @@
+{"steps":[
+{"click":"Remove","expect":{"text":"It's gone!","timeout":10000}},
+{"click":"Enable","expect":{"text":"It's enabled!","timeout":10000}},
+{"fill":{"css":"input[type=text]"},"value":"Hello from Foresight"}
+]}

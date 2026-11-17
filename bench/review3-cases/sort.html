@@ -1,0 +1,5 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Sort</title></head><body>
+<label for="s">Sort by</label> <select id="s" onchange="location = 'sort.html?by=' + this.value + '&n=' + (Number(new URLSearchParams(location.search).get('n') || 0) + 1)"><option>Name</option><option>Price</option><option>Date</option></select>
+<p id="n"></p>
+<script>const q = new URLSearchParams(location.search); if (q.get('by')) document.getElementById('s').value = q.get('by'); document.getElementById('n').textContent = 'loads caused by the dropdown: ' + (q.get('n') || 0);</script>
+</body></html>

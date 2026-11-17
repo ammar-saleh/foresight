@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Upgrade</title></head><body>
+<script>window.__log = []; const log = (x) => window.__log.push(x);</script>
+<h1>Account</h1>
+<label>Company name <input id="c"></label>
+<div id="dlg" role="dialog" aria-modal="true" style="position:fixed; inset:15%; background:#eee; padding:20px">
+  <h2>Confirm upgrade to Pro ($20 / month)</h2>
+  <button onclick="log('upgrade confirmed')">Confirm</button>
+  <button onclick="log('UPGRADE CANCELLED by the engine'); document.getElementById('dlg').remove()">Cancel</button>
+</div>
+</body></html>

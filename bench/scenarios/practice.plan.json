@@ -1,0 +1,15 @@
+{"steps":[
+{"fill":"First Name","value":"Layla"},
+{"fill":"Last Name","value":"Haddad"},
+{"fill":"name@example.com","value":"layla.haddad@example.com"},
+{"radio":"gender","value":"Female"},
+{"fill":"Mobile Number","value":"5550142000"},
+{"fill":"dateOfBirthInput","value":"17 May 1994"},
+{"keys":"Escape"},
+{"pick":"subjectsInput","value":"Maths","typeText":"Ma"},
+{"check":"Reading"},
+{"fill":"Current Address","value":"221 Cedar Lane, Austin"},
+{"pick":"react-select-3-input","value":"NCR","typeText":"NCR"},
+{"pick":"react-select-4-input","value":"Delhi","typeText":"Del"},
+{"click":"Submit","risk":"irreversible","expect":{"text":"Thanks for submitting the form","timeout":8000}}
+]}

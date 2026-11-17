@@ -1,0 +1,1 @@
+{"steps":[{"click":{"css":"#datepicker"},"frame":1,"expect":{"selector":"#ui-datepicker-div"}},{"click":"15","frame":1},{"keys":"Escape"}]}

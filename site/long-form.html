@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Account registration</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="long-form">
+<main><div class="card">
+  <h1>Create your account</h1><p class="sub">All fields are required unless marked optional.</p>
+  <form id="f" novalidate>
+    <div class="grid2">
+      <div class="field"><label for="fn">First name</label><input id="fn" type="text" autocomplete="off"></div>
+      <div class="field"><label for="ln">Last name</label><input id="ln" type="text" autocomplete="off"></div>
+      <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="off"></div>
+      <div class="field"><label for="ph">Phone</label><input id="ph" type="tel" autocomplete="off"></div>
+      <div class="field"><label for="un">Username</label><input id="un" type="text" autocomplete="off"></div>
+      <div class="field"><label for="co">Company</label><input id="co" type="text" autocomplete="off"></div>
+      <div class="field"><label for="jt">Job title</label><input id="jt" type="text" autocomplete="off"></div>
+      <div class="field"><label for="dob">Date of birth</label><input id="dob" type="date"></div>
+      <div class="field full"><label for="st">Street address</label><input id="st" type="text" autocomplete="off"></div>
+      <div class="field"><label for="ci">City</label><input id="ci" type="text" autocomplete="off"></div>
+      <div class="field"><label for="sa">State</label>
+        <select id="sa"><option value="">Choose…</option><option>California</option><option>New York</option><option>Texas</option><option>Washington</option></select></div>
+      <div class="field"><label for="zip">ZIP code</label><input id="zip" type="text" autocomplete="off"></div>
+      <div class="field"><label for="cn">Country</label>
+        <select id="cn"><option value="">Choose…</option><option>Canada</option><option>Jordan</option><option>United Kingdom</option><option>United States</option></select></div>
+      <fieldset class="field full"><legend>Preferred contact</legend>
+        <div class="inline">
+          <label><input type="radio" name="pc" value="Email"> Email</label>
+          <label><input type="radio" name="pc" value="Phone"> Phone</label>
+          <label><input type="radio" name="pc" value="SMS"> SMS</label>
+        </div></fieldset>
+      <div class="field full"><label for="bio">Short bio</label><textarea id="bio" rows="2"></textarea></div>
+      <div class="check full"><input id="nl" type="checkbox"><label for="nl">Send me the newsletter (optional)</label></div>
+      <div class="check full"><input id="tos" type="checkbox"><label for="tos">I agree to the terms of service</label></div>
+    </div>
+    <div class="actions"><button type="submit">Create account</button></div>
+    <div class="errors" id="err"></div>
+  </form>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const task = await Bench.task;
+  const actual = {
+    'First name': $('fn').value, 'Last name': $('ln').value, 'Email': $('em').value, 'Phone': $('ph').value,
+    'Username': $('un').value, 'Company': $('co').value, 'Job title': $('jt').value, 'Street address': $('st').value,
+    'City': $('ci').value, 'State': $('sa').value, 'ZIP code': $('zip').value, 'Country': $('cn').value,
+    'Date of birth': $('dob').value, 'Preferred contact': (document.querySelector('input[name=pc]:checked') || {}).value,
+    'Short bio': $('bio').value, 'I agree to the terms of service': $('tos').checked,
+  };
+  const errs = Bench.diff(task.data, actual);
+  if ($('nl').checked) errs.push('Newsletter should stay unchecked');
+  if (errs.length) return Bench.reject(errs, $('err'));
+  $('err').textContent = '';
+  Bench.finish($('f'));
+});
+</script>
+</body></html>

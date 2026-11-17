@@ -1,0 +1,99 @@
+{
+  "long-form": {
+    "title": "Account registration",
+    "page": "/long-form.html",
+    "instruction": "Register this account, leave the newsletter box unchecked, accept the terms, then press Create account.",
+    "data": {
+      "First name": "Layla",
+      "Last name": "Haddad",
+      "Email": "layla.haddad@example.com",
+      "Phone": "555-0142",
+      "Username": "lhaddad",
+      "Company": "Northwind Labs",
+      "Job title": "Product Engineer",
+      "Street address": "221 Cedar Lane",
+      "City": "Austin",
+      "State": "Texas",
+      "ZIP code": "73301",
+      "Country": "United States",
+      "Date of birth": "1994-05-17",
+      "Preferred contact": "SMS",
+      "Short bio": "Builds fast, careful software.",
+      "I agree to the terms of service": true
+    }
+  },
+  "autocomplete": {
+    "title": "Flight search",
+    "page": "/autocomplete.html",
+    "instruction": "Search a flight. From and To must be chosen from the suggestion list (exact airport given). Then press Search flights.",
+    "data": {
+      "Passenger name": "Layla Haddad",
+      "From": "Amman, Jordan (AMM)",
+      "To": "Istanbul, Türkiye (IST)",
+      "Departure date": "2026-12-20",
+      "Passengers": "2",
+      "Cabin": "Business"
+    }
+  },
+  "late-modal": {
+    "title": "Contact support",
+    "page": "/late-modal.html",
+    "instruction": "Send this support request. If any popup appears, decline it (privacy-preserving). Then press Send request.",
+    "data": {
+      "Your name": "Layla Haddad",
+      "Email": "layla.haddad@example.com",
+      "Order number": "NW-48213",
+      "Topic": "Billing",
+      "Message": "I was charged twice for order NW-48213.",
+      "Send me a copy": true
+    }
+  },
+  "wizard": {
+    "title": "Three-step checkout",
+    "page": "/wizard.html",
+    "instruction": "Complete the 3-step checkout with this data and place the order (local test shop, no real payment).",
+    "data": {
+      "Full name": "Layla Haddad",
+      "Address": "221 Cedar Lane",
+      "City": "Austin",
+      "Postal code": "73301",
+      "Delivery speed": "Express (1-2 days)",
+      "Add gift wrap": true,
+      "Delivery note": "Leave at the front desk.",
+      "Payment method": "Invoice",
+      "PO number": "PO-7781",
+      "I confirm this order": true
+    }
+  },
+  "drift": {
+    "title": "Profile settings (layout changes every load)",
+    "page": "/drift.html",
+    "instruction": "Update the profile with this data and save. Field order, ids and some labels change on every page load.",
+    "data": {
+      "Display name": "Layla H.",
+      "Email address": "layla.haddad@example.com",
+      "Phone": "555-0199",
+      "Website": "https://example.com/layla",
+      "Time zone": "(UTC+03:00) Amman",
+      "Language": "English",
+      "Two-factor authentication": true
+    }
+  },
+  "grid": {
+    "title": "Inventory grid",
+    "page": "/grid.html",
+    "instruction": "Enter On hand and Reorder at for every SKU, then press Save inventory.",
+    "data": {
+      "SKU-101": { "On hand": "42", "Reorder at": "10" },
+      "SKU-102": { "On hand": "7", "Reorder at": "15" },
+      "SKU-103": { "On hand": "120", "Reorder at": "40" },
+      "SKU-104": { "On hand": "0", "Reorder at": "5" },
+      "SKU-105": { "On hand": "63", "Reorder at": "20" },
+      "SKU-106": { "On hand": "18", "Reorder at": "18" },
+      "SKU-107": { "On hand": "250", "Reorder at": "60" },
+      "SKU-108": { "On hand": "9", "Reorder at": "12" },
+      "SKU-109": { "On hand": "77", "Reorder at": "25" },
+      "SKU-110": { "On hand": "31", "Reorder at": "8" }
+    }
+  }
+}

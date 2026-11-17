@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact support</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="late-modal">
+<main><div class="card">
+  <h1>Contact support</h1><p class="sub">We usually answer within a day.</p>
+  <form id="f" novalidate>
+    <div class="grid2">
+      <div class="field"><label for="nm">Your name</label><input id="nm" type="text" autocomplete="off"></div>
+      <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="off"></div>
+      <div class="field"><label for="on">Order number</label><input id="on" type="text" autocomplete="off"></div>
+      <div class="field"><label for="tp">Topic</label>
+        <select id="tp"><option value="">Choose…</option><option>Shipping</option><option>Billing</option><option>Returns</option><option>Other</option></select></div>
+      <div class="field full"><label for="msg">Message</label><textarea id="msg" rows="3"></textarea></div>
+      <div class="check full"><input id="cp" type="checkbox"><label for="cp">Send me a copy</label></div>
+    </div>
+    <div class="actions"><button type="submit">Send request</button></div>
+    <div class="errors" id="err"></div>
+  </form>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+// A marketing popup appears either 900 ms after load or the moment the 3rd field is touched,
+// whichever comes first. While it is open, the form is covered; editing it anyway is a failure
+// (a real user could not have done that, and a blind executor typing "through" a dialog is a bug).
+let modalOpen = false, modalShown = false, choice = null, touched = new Set();
+function showModal() {
+  if (modalShown) return; modalShown = true; modalOpen = true;
+  const o = document.createElement('div');
+  o.className = 'overlay'; o.id = 'promo';
+  o.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="ph">
+    <h2 id="ph">Get 10% off your next order</h2><p class="sub">Join our newsletter and partner offers.</p>
+    <div class="actions"><button id="acc">Accept all &amp; subscribe</button><button class="ghost" id="dec">No thanks</button></div></div>`;
+  document.body.append(o);
+  const close = (c) => { choice = c; modalOpen = false; o.remove(); };
+  o.querySelector('#acc').onclick = () => close('accepted');
+  o.querySelector('#dec').onclick = () => close('declined');
+}
+setTimeout(showModal, 900);
+for (const el of $('f').querySelectorAll('input,select,textarea')) {
+  const on = () => {
+    if (modalOpen) Bench.flag('edited-under-modal');
+    touched.add(el.id); if (touched.size >= 3) showModal();
+  };
+  el.addEventListener('input', on); el.addEventListener('change', on); el.addEventListener('focus', () => { touched.add(el.id); if (touched.size >= 3) showModal(); });
+}
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (modalOpen) { Bench.flag('submitted-under-modal'); return; }
+  const task = await Bench.task;
+  const actual = { 'Your name': $('nm').value, 'Email': $('em').value, 'Order number': $('on').value, 'Topic': $('tp').value,
+    'Message': $('msg').value, 'Send me a copy': $('cp').checked };
+  const errs = Bench.diff(task.data, actual);
+  if (choice !== 'declined') errs.push('Popup must be shown and declined (got: ' + (choice || 'not dismissed') + ')');
+  if (Bench.flags.includes('edited-under-modal')) errs.push('A field was edited while the popup covered the form');
+  if (errs.length) return Bench.reject(errs, $('err'));
+  $('err').textContent = '';
+  Bench.finish($('f'));
+});
+</script>
+</body></html>

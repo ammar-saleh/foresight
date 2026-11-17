@@ -1,0 +1,11 @@
+{"steps":[
+{"fill":"Customer name","value":"Layla Haddad"},
+{"fill":"Telephone","value":"555-0142"},
+{"fill":"E-mail address","value":"layla.haddad@example.com"},
+{"radio":"Pizza Size","value":"Medium"},
+{"check":"Bacon"},
+{"check":"Mushroom"},
+{"fill":"Preferred delivery time","value":"18:30"},
+{"fill":"Delivery instructions","value":"Ring the bell twice."},
+{"click":"Submit order","risk":"irreversible","expect":{"text":"custname","timeout":15000}}
+]}

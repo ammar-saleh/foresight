@@ -1,0 +1,1 @@
+{"steps": [{"fill": "Search Wikipedia", "value": "Speculative execution"}, {"keys": "Enter", "expect": {"title": "Speculative execution", "timeout": 15000}}, {"click": "Branch predictor", "expect": {"title": "Branch predictor", "timeout": 15000}}]}

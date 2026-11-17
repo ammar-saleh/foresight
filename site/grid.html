@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventory</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="grid">
+<main><div class="card">
+  <h1>Inventory count</h1><p class="sub">Enter counts for each SKU and save.</p>
+  <table id="t"><thead><tr><th>SKU</th><th>Product</th><th>On hand</th><th>Reorder at</th></tr></thead><tbody></tbody></table>
+  <div class="actions"><button id="save">Save inventory</button></div>
+  <div class="errors" id="err"></div>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const ROWS = [['SKU-101', 'Cedar desk lamp'], ['SKU-102', 'Walnut shelf'], ['SKU-103', 'Linen cushion'], ['SKU-104', 'Brass hook set'],
+  ['SKU-105', 'Oak side table'], ['SKU-106', 'Wool throw'], ['SKU-107', 'Ceramic mug'], ['SKU-108', 'Rattan basket'], ['SKU-109', 'Glass vase'], ['SKU-110', 'Jute rug']];
+const tb = document.querySelector('#t tbody');
+for (const [sku, name] of ROWS) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><b>${sku}</b></td><td>${name}</td>
+    <td><input type="number" aria-label="${sku} On hand"></td><td><input type="number" aria-label="${sku} Reorder at"></td>`;
+  tb.append(tr);
+}
+$('save').onclick = async () => {
+  const task = await Bench.task;
+  const actual = {};
+  for (const tr of tb.rows) {
+    const sku = tr.cells[0].textContent.trim();
+    actual[sku] = { 'On hand': tr.cells[2].querySelector('input').value, 'Reorder at': tr.cells[3].querySelector('input').value };
+  }
+  const errs = Bench.diff(task.data, actual);
+  if (errs.length) return Bench.reject(errs, $('err'));
+  $('err').textContent = '';
+  $('save').textContent = 'Saving…';
+  setTimeout(() => { $('save').textContent = 'Saved'; Bench.finish(); }, 300);
+};
+</script>
+</body></html>

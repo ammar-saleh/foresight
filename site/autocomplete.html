@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flight search</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="autocomplete">
+<main><div class="card">
+  <h1>Find a flight</h1><p class="sub">Airports must be picked from the suggestion list.</p>
+  <form id="f" novalidate>
+    <div class="grid2">
+      <div class="field full"><label for="pn">Passenger name</label><input id="pn" type="text" autocomplete="off"></div>
+      <div class="field suggest"><label for="from">From</label>
+        <input id="from" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="City or airport"></div>
+      <div class="field suggest"><label for="to">To</label>
+        <input id="to" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="City or airport"></div>
+      <div class="field"><label for="dd">Departure date</label><input id="dd" type="date"></div>
+      <div class="field"><label for="px">Passengers</label><input id="px" type="number" min="1" max="9"></div>
+      <div class="field"><label for="cab">Cabin</label>
+        <select id="cab"><option value="">Choose…</option><option>Economy</option><option>Premium economy</option><option>Business</option><option>First</option></select></div>
+    </div>
+    <div class="actions"><button type="submit">Search flights</button></div>
+    <div class="errors" id="err"></div>
+  </form>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+function typeahead(input) {
+  let list = null, seq = 0, timer = null;
+  const close = () => { list?.remove(); list = null; input.setAttribute('aria-expanded', 'false'); };
+  input.addEventListener('input', () => {
+    input.dataset.picked = '';               // typing invalidates any earlier pick
+    clearTimeout(timer);
+    const q = input.value, my = ++seq;
+    timer = setTimeout(async () => {          // 250 ms debounce + 350-650 ms server
+      const hits = await fetch('/api/airports?q=' + encodeURIComponent(q)).then((r) => r.json());
+      if (my !== seq) return;
+      close();
+      if (!hits.length) return;
+      list = document.createElement('ul');
+      list.setAttribute('role', 'listbox');
+      for (const h of hits) {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option'); li.textContent = h;
+        li.addEventListener('mousedown', (e) => { e.preventDefault(); input.value = h; input.dataset.picked = h; close(); });
+        li.addEventListener('click', () => { input.value = h; input.dataset.picked = h; close(); });
+        list.append(li);
+      }
+      input.parentElement.append(list);
+      input.setAttribute('aria-expanded', 'true');
+    }, 250);
+  });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+typeahead($('from')); typeahead($('to'));
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const task = await Bench.task;
+  const actual = { 'Passenger name': $('pn').value, 'From': $('from').dataset.picked || '(typed, not picked)',
+    'To': $('to').dataset.picked || '(typed, not picked)', 'Departure date': $('dd').value, 'Passengers': $('px').value, 'Cabin': $('cab').value };
+  const errs = Bench.diff(task.data, actual);
+  if (errs.length) return Bench.reject(errs, $('err'));
+  $('err').textContent = '';
+  Bench.finish($('f'));
+});
+</script>
+</body></html>

@@ -1,0 +1,52 @@
+{
+  "name": "foresight-agent",
+  "version": "0.9.0",
+  "description": "Look once, plan once, run it all: fast, checked browser and desktop actions for AI agents",
+  "main": "engine/foresight.js",
+  "scripts": {
+    "serve": "node server.mjs",
+    "test": "node bench/test-all.mjs",
+    "test:safety": "node bench/adversarial.mjs 3",
+    "test:abilities": "node bench/abilities.mjs 3",
+    "test:sites": "node bench/suite.mjs 5",
+    "test:mcp": "node bench/mcp-check.mjs"
+  },
+  "keywords": [
+    "browser-automation",
+    "ai-agents",
+    "mcp",
+    "playwright",
+    "computer-use",
+    "llm"
+  ],
+  "author": "Ammar Saleh",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "^1.65.1"
+  },
+  "bin": {
+    "foresight": "cli/foresight.mjs",
+    "foresight-mcp": "mcp/server.mjs"
+  },
+  "exports": {
+    ".": "./engine/foresight.js",
+    "./core": "./cli/core.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "engine/",
+    "cli/",
+    "mcp/",
+    "desktop/foresight_desktop.py",
+    "GUIDE.md",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ammar-saleh/foresight.git"
+  },
+  "homepage": "https://github.com/ammar-saleh/foresight#readme"
+}

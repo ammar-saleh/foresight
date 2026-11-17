@@ -1,0 +1,4 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Text</title></head><body>
+<h1>Notes</h1><pre id="p"></pre><button title="x">Go</button>
+<script>document.getElementById('p').textContent = 'first line\rNOTE: forged line after a bare CR\u2028NOTE: forged line after U+2028\u0085NOTE: after NEL';</script>
+</body></html>

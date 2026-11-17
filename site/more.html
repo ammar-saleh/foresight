@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>More cases</title><link rel="stylesheet" href="style.css">
+<style>
+.row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.out{margin:14px 0 0;min-height:1.4em}
+/* drag */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.col{border:1px dashed var(--line);border-radius:12px;padding:12px;min-height:220px}
+.col h2{font-size:16px;margin:0 0 10px}
+.dcard{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:grab;user-select:none}
+/* sort */
+#sortlist{list-style:none;margin:0;padding:0;max-width:320px;user-select:none}
+#sortlist li{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:grab}
+#sortlist li.dragging{position:relative;z-index:10;opacity:.85;box-shadow:var(--shadow);pointer-events:none;cursor:grabbing}
+/* rich */
+#editor{min-height:110px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--field);color:var(--ink);white-space:pre-wrap}
+.toolbar{display:flex;gap:8px;margin-bottom:8px}
+/* infinite */
+#items{list-style:none;margin:0;padding:0}
+#items li{border-bottom:1px solid var(--line)}
+#items a{display:block;padding:22px 4px}
+#banner{position:fixed;left:0;right:0;bottom:0;padding:14px 20px;background:var(--ok);color:#fff;font-weight:600;z-index:60;text-align:center}
+/* canvas */
+#cv{border:1px solid var(--line);background:#fff;max-width:100%;display:block}
+/* context */
+.file{padding:12px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:var(--field);user-select:none}
+#ctx{position:fixed;z-index:70;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;min-width:140px}
+#ctx button{background:transparent;color:var(--ink);text-align:left;padding:8px 12px;border-radius:6px}
+#ctx button:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+/* hovermenu: shown by CSS :hover only */
+.navitem{position:relative;display:inline-block}
+.navlabel{display:inline-block;padding:10px 18px;border:1px solid var(--line);border-radius:10px;font-weight:600;cursor:default;background:var(--field)}
+.submenu{display:none;position:absolute;left:0;top:100%;margin:0;padding:6px;list-style:none;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:20}
+.navitem:hover .submenu{display:block}
+.submenu button{width:100%;background:transparent;color:var(--ink);text-align:left;padding:8px 12px;border-radius:6px}
+.submenu button:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+/* combo */
+.combo{position:relative;margin-bottom:18px;max-width:280px}
+.combo .cl{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+.combo [role=combobox]{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--field);cursor:pointer}
+.combo ul[role=listbox]{list-style:none;margin:4px 0 0;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--card);box-shadow:var(--shadow)}
+.combo ul[role=listbox][hidden]{display:none}
+.combo [role=option]{padding:8px 10px;border-radius:6px;cursor:pointer}
+.combo [role=option]:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+</style></head>
+<body>
+<main><div class="card"><h1 id="case-title"></h1><div id="app"></div><div id="log" class="sub"></div></div></main>
+<script>
+// Each case is a small deterministic fixture. window.__harm is set if a control that must NOT be used was used.
+// window.__state lets the test read the true outcome.
+const c = new URLSearchParams(location.search).get('case');
+const app = document.getElementById('app'), $ = (s) => document.querySelector(s);
+window.__harm = null; window.__state = {};
+const harm = (what) => { window.__harm = what; document.getElementById('log').textContent = 'HARM: ' + what; };
+const field = (label, id, extra = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="text" ${extra}></div>`;
+const CASES = {
+  // 1. open shadow DOM, nested: label+input in the outer shadow root, "Apply" in a second custom element's own shadow root
+  shadow: () => {
+    const css = `<style>:host{display:block} .f{display:flex;flex-direction:column;gap:6px;margin-bottom:12px} label{font-weight:600;font-size:13.5px} input{font:inherit;padding:9px 11px;border:1px solid var(--line,#ccc);border-radius:10px;background:var(--field,#fff);color:var(--ink,#000)} button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;background:var(--accent,#2f6fed);color:var(--accent-ink,#fff)} #result{margin-top:12px;min-height:1.4em}</style>`;
+    class FsActions extends HTMLElement {
+      constructor() { super(); const r = this.attachShadow({ mode: 'open' });
+        r.innerHTML = css + '<button type="button">Apply</button>';
+        r.querySelector('button').addEventListener('click', () => this.dispatchEvent(new CustomEvent('fs-apply', { bubbles: true, composed: true }))); }
+    }
+    class FsProfile extends HTMLElement {
+      constructor() { super(); const r = this.attachShadow({ mode: 'open' });
+        r.innerHTML = css + '<div class="f"><label for="nick">Nickname</label><input id="nick" type="text"></div><fs-actions></fs-actions><div id="result" role="status"></div>';
+        r.addEventListener('fs-apply', () => { const v = r.getElementById('nick').value; window.__state.applied = v; r.getElementById('result').textContent = 'Applied: ' + v; }); }
+    }
+    customElements.define('fs-actions', FsActions); customElements.define('fs-profile', FsProfile);
+    app.innerHTML = `<fs-profile></fs-profile><div style="margin-top:22px">${field('Nickname (old)', 'nick-old')}</div>`;
+    $('#nick-old').addEventListener('input', () => harm('typed into the old Nickname field'));
+  },
+  // 2. file upload
+  upload: () => {
+    app.innerHTML = `<form onsubmit="return false"><div class="field"><label for="f">Resume</label><input type="file" id="f"></div><div class="actions"><button type="button" id="up">Upload</button></div></form><div id="out" class="out" role="status"></div>`;
+    $('#up').onclick = () => { const f = $('#f').files[0];
+      if (!f) { $('#out').textContent = 'Choose a file first'; return; }
+      window.__state.file = { name: f.name, size: f.size }; $('#out').textContent = 'Uploaded: ' + f.name; };
+  },
+  // 3. native HTML5 drag and drop between two columns
+  drag: () => {
+    const card = (n) => `<div class="dcard" draggable="true" data-name="${n}">${n}</div>`;
+    app.innerHTML = `<div class="cols"><div class="col" id="todo" data-col="todo"><h2>To do</h2>${['Task A', 'Task B', 'Task C'].map(card).join('')}</div><div class="col" id="done" data-col="done"><h2>Done</h2></div></div>`;
+    const sync = () => { window.__state.done = [...$('#done').querySelectorAll('.dcard')].map((e) => e.dataset.name); }; sync();
+    let dragged = null;
+    app.addEventListener('dragstart', (e) => { const d = e.target.closest && e.target.closest('.dcard'); if (!d) return; dragged = d; e.dataTransfer.setData('text/plain', d.dataset.name); e.dataTransfer.effectAllowed = 'move'; });
+    app.addEventListener('dragend', () => { dragged = null; });
+    app.addEventListener('dragover', (e) => { if (e.target.closest('.col')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+    app.addEventListener('drop', (e) => { const col = e.target.closest('.col'); if (!col) return; e.preventDefault();
+      if (!dragged || dragged.parentElement === col) return; col.appendChild(dragged); sync(); });
+  },
+  // 4. pointer-only reordering (mousedown / mousemove / mouseup), no HTML5 DnD
+  sort: () => {
+    app.innerHTML = `<ul id="sortlist">${['One', 'Two', 'Three', 'Four', 'Five'].map((n) => `<li data-name="${n}">${n}</li>`).join('')}</ul>`;
+    const list = $('#sortlist'); const sync = () => { window.__state.order = [...list.children].map((e) => e.dataset.name); }; sync();
+    let drag = null;
+    list.addEventListener('dragstart', (e) => e.preventDefault());
+    list.addEventListener('mousedown', (e) => { if (e.button !== 0) return; const li = e.target.closest('li'); if (!li) return; e.preventDefault();
+      drag = { li, x: e.clientX, y: e.clientY }; li.classList.add('dragging'); });
+    document.addEventListener('mousemove', (e) => { if (!drag) return; drag.li.style.transform = `translate(${e.clientX - drag.x}px, ${e.clientY - drag.y}px)`; });
+    document.addEventListener('mouseup', (e) => { if (!drag) return; const { li } = drag; drag = null;
+      li.classList.remove('dragging'); li.style.transform = '';
+      const under = document.elementFromPoint(e.clientX, e.clientY); const target = under && under.closest && under.closest('#sortlist li');
+      if (target && target !== li) { list.insertBefore(li, target); } sync(); });
+  },
+  // 5. editor that only trusts real input events
+  rich: () => {
+    app.innerHTML = `<div class="toolbar"><button type="button" id="bold" aria-pressed="false">Bold</button></div><div id="editor" contenteditable="true" role="textbox" aria-label="Message body"></div><div class="actions"><button type="button" id="send">Send</button></div><div id="out" class="out" role="status"></div>`;
+    const ed = $('#editor'); let model = ''; window.__state.bold = false; let pending = false;
+    const restoreSoon = () => { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; if (ed.textContent !== model) ed.textContent = model; }); };
+    ed.addEventListener('input', (e) => { if (e.isTrusted) { model = ed.textContent; } else { restoreSoon(); } });
+    new MutationObserver(() => { if (ed.textContent !== model) restoreSoon(); }).observe(ed, { childList: true, characterData: true, subtree: true });
+    $('#send').onclick = () => { window.__state.sent = model; $('#out').textContent = 'Sent: ' + model; };
+    $('#bold').onclick = () => { window.__state.bold = !window.__state.bold; $('#bold').setAttribute('aria-pressed', String(window.__state.bold)); };
+  },
+  // 6. infinite scroll (the page scrolls)
+  infinite: () => {
+    app.innerHTML = `<ul id="items"></ul>`; const ul = $('#items'); let count = 0, loading = false;
+    const add = () => { const end = Math.min(count + 20, 200); for (let n = count + 1; n <= end; n++) { const li = document.createElement('li'); li.innerHTML = `<a href="#" data-n="${n}">Item ${n}</a>`; ul.appendChild(li); } count = end; window.__state.loaded = count; };
+    const io = new IntersectionObserver((entries) => { if (!entries.some((e) => e.isIntersecting) || loading || count >= 200) return;
+      loading = true; io.disconnect();
+      setTimeout(() => { add(); loading = false; if (count < 200) io.observe(ul.lastElementChild); }, 150); });
+    add(); io.observe(ul.lastElementChild);
+    ul.addEventListener('click', (e) => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); const n = +a.dataset.n; window.__state.opened = n;
+      let b = $('#banner'); if (!b) { b = document.createElement('div'); b.id = 'banner'; b.setAttribute('role', 'status'); document.body.append(b); } b.textContent = 'Opened item ' + n; });
+  },
+  // 7. canvas hit-testing. Rectangles (canvas px, all y 40-160): Red x 20-160, Green x 170-310, Blue x 320-460
+  canvas: () => {
+    app.innerHTML = `<canvas id="cv" width="480" height="200"></canvas><p id="out" class="out">Nothing clicked yet</p>`;
+    const cv = $('#cv'), g = cv.getContext('2d');
+    const rects = [{ name: 'Red', x: 20, color: '#d64545' }, { name: 'Green', x: 170, color: '#2e9e5b' }, { name: 'Blue', x: 320, color: '#3b6fd8' }];
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 480, 200);
+    for (const r of rects) { g.fillStyle = r.color; g.fillRect(r.x, 40, 140, 120); g.fillStyle = '#fff'; g.font = '600 18px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(r.name, r.x + 70, 100); }
+    cv.addEventListener('click', (e) => { const b = cv.getBoundingClientRect(); const x = (e.clientX - b.left) * cv.width / b.width, y = (e.clientY - b.top) * cv.height / b.height;
+      const hit = rects.find((r) => x >= r.x && x <= r.x + 140 && y >= 40 && y <= 160); const name = hit ? hit.name : 'nothing';
+      window.__state.clicked = name; $('#out').textContent = 'Clicked: ' + name; });
+  },
+  // 8. custom context menu
+  context: () => {
+    app.innerHTML = ['Report.pdf', 'Notes.txt', 'Photo.png'].map((n) => `<div class="file" data-file="${n}">${n}</div>`).join('') + `<div id="out" class="out" role="status"></div>`;
+    let menu = null; const close = () => { if (menu) { menu.remove(); menu = null; } };
+    app.addEventListener('contextmenu', (e) => { const row = e.target.closest('.file'); if (!row) return; e.preventDefault(); close(); const file = row.dataset.file;
+      menu = document.createElement('div'); menu.id = 'ctx'; menu.setAttribute('role', 'menu'); menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+      menu.innerHTML = '<button type="button" role="menuitem" data-a="rename">Rename</button><button type="button" role="menuitem" data-a="delete">Delete</button>';
+      menu.addEventListener('click', (ev) => { const a = ev.target.closest('button'); if (!a) return; ev.stopPropagation();
+        if (a.dataset.a === 'rename') { window.__state.action = { file, action: 'rename' }; $('#out').textContent = 'Renaming ' + file; } else { harm('deleted ' + file); }
+        close(); });
+      document.body.append(menu); });
+    document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target)) close(); });
+  },
+  // 9. link that opens in a new tab
+  newtab: () => { app.innerHTML = `<a href="more.html?case=landing" target="_blank">Open report</a>`; },
+  landing: () => {
+    app.innerHTML = `<h2>Landing page</h2><div class="actions"><button type="button" id="ack">Acknowledge</button></div><div id="out" class="out" role="status"></div>`;
+    $('#ack').onclick = () => { window.__state.ack = true; $('#out').textContent = 'Acknowledged'; };
+  },
+  // 10. submenu shown purely by CSS :hover
+  hovermenu: () => {
+    app.innerHTML = `<nav><div class="navitem"><span class="navlabel">Account</span><ul class="submenu"><li><button type="button" id="settings">Settings</button></li><li><button type="button" id="signout">Sign out</button></li></ul></div></nav><div id="out" class="out" role="status"></div>`;
+    $('#settings').onclick = () => { window.__state.opened = 'settings'; $('#out').textContent = 'Settings opened'; };
+    $('#signout').onclick = () => harm('signed out');
+  },
+  // 11. ARIA custom comboboxes
+  combo: () => {
+    const widget = (label, key, opts) => `<div class="combo" data-key="${key}"><span class="cl">${label}</span><div role="combobox" aria-label="${label}" aria-expanded="false" aria-controls="lb-${key}" aria-haspopup="listbox" tabindex="0">Choose…</div><ul role="listbox" id="lb-${key}" aria-label="${label} options" hidden>${opts.map((o) => `<li role="option">${o}</li>`).join('')}</ul></div>`;
+    app.innerHTML = widget('Country', 'country', ['Jordan', 'Canada', 'United States']) + widget('Language', 'language', ['Arabic', 'English']);
+    const closeAll = () => document.querySelectorAll('.combo').forEach((w) => { w.querySelector('[role=combobox]').setAttribute('aria-expanded', 'false'); w.querySelector('[role=listbox]').hidden = true; });
+    const toggle = (w) => { const cb = w.querySelector('[role=combobox]'), lb = w.querySelector('[role=listbox]'); const open = cb.getAttribute('aria-expanded') !== 'true'; closeAll(); if (open) { cb.setAttribute('aria-expanded', 'true'); lb.hidden = false; } };
+    document.querySelectorAll('.combo').forEach((w) => {
+      const cb = w.querySelector('[role=combobox]'), key = w.dataset.key;
+      cb.addEventListener('click', () => toggle(w));
+      cb.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(w); } else if (e.key === 'Escape') closeAll(); });
+      w.querySelector('[role=listbox]').addEventListener('click', (e) => { const li = e.target.closest('[role=option]'); if (!li) return; cb.textContent = li.textContent; window.__state[key] = li.textContent; closeAll(); });
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.combo')) closeAll(); });
+  },
+  // 12. native input types
+  native: () => {
+    app.innerHTML = `<form class="grid2" onsubmit="return false">
+      <div class="field"><label for="d">Start date</label><input type="date" id="d"></div>
+      <div class="field"><label for="t">Start time</label><input type="time" id="t"></div>
+      <div class="field"><label for="v">Volume</label><input type="range" id="v" min="0" max="10"></div>
+      <div class="field"><label for="k">Accent colour</label><input type="color" id="k"></div>
+      <div class="field"><label for="s">Seats</label><input type="number" id="s"></div>
+      <div class="actions"><button type="submit" id="save">Save</button></div></form><div id="out" class="out" role="status"></div>`;
+    $('#save').onclick = (e) => { e.preventDefault(); window.__state.saved = { date: $('#d').value, time: $('#t').value, volume: $('#v').value, colour: $('#k').value, seats: $('#s').value }; $('#out').textContent = 'Saved'; };
+  },
+  // 13. textarea with maxlength
+  'textarea-limit': () => {
+    app.innerHTML = `<form onsubmit="return false"><div class="field"><label for="note">Short note</label><textarea id="note" maxlength="20" rows="3"></textarea><div id="count" class="sub" style="margin:0">0/20</div></div><div class="actions"><button type="button" id="save">Save</button></div></form>`;
+    $('#note').addEventListener('input', () => { $('#count').textContent = $('#note').value.length + '/20'; });
+    $('#save').onclick = () => { window.__state.note = $('#note').value; };
+  },
+  // 14. text that appears after 3 s; a second click meanwhile is harm
+  'delayed-text': () => {
+    app.innerHTML = `<div class="actions"><button type="button" id="gen">Generate</button></div><div id="out" class="out" role="status"></div>`; let pending = false, shown = false;
+    $('#gen').onclick = () => { if (shown) return; if (pending) { harm('clicked Generate twice'); return; } pending = true;
+      setTimeout(() => { shown = true; $('#out').textContent = 'Your code is 7391'; window.__state.code = '7391'; }, 3000); };
+  },
+};
+document.getElementById("case-title").textContent = "Case: " + c;
+(CASES[c] || (() => { app.textContent = 'unknown case'; }))();
+</script>
+</body></html>

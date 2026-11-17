@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="wizard">
+<main><div class="card">
+  <h1>Checkout</h1><p class="sub">Local test shop. No real payment is taken.</p>
+  <div class="steps"><span data-s="1">1 Shipping</span>›<span data-s="2">2 Delivery</span>›<span data-s="3">3 Review</span></div>
+  <div id="stage"></div>
+  <div class="errors" id="err"></div>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const order = {};
+const STEPS = {
+  1: `<div class="grid2">
+      <div class="field full"><label for="w-name">Full name</label><input id="w-name" type="text" autocomplete="off"></div>
+      <div class="field full"><label for="w-addr">Address</label><input id="w-addr" type="text" autocomplete="off"></div>
+      <div class="field"><label for="w-city">City</label><input id="w-city" type="text" autocomplete="off"></div>
+      <div class="field"><label for="w-zip">Postal code</label><input id="w-zip" type="text" autocomplete="off"></div></div>
+      <div class="actions"><button id="next1">Continue to delivery</button></div>`,
+  2: `<fieldset class="field"><legend>Delivery speed</legend><div class="inline">
+        <label><input type="radio" name="spd" value="Standard (4-6 days)"> Standard (4-6 days)</label>
+        <label><input type="radio" name="spd" value="Express (1-2 days)"> Express (1-2 days)</label></div></fieldset>
+      <div class="check" style="margin:14px 0"><input id="w-gift" type="checkbox"><label for="w-gift">Add gift wrap</label></div>
+      <div class="field"><label for="w-note">Delivery note</label><textarea id="w-note" rows="2"></textarea></div>
+      <div class="actions"><button class="ghost" id="back2">Back</button><button id="next2">Continue to review</button></div>`,
+  3: () => `<div class="summary"><b>${order.name}</b>, ${order.addr}, ${order.city} ${order.zip}<br>${order.speed}${order.gift ? ' · gift wrap' : ''}</div>
+      <div class="grid2">
+      <div class="field"><label for="w-pay">Payment method</label>
+        <select id="w-pay"><option value="">Choose…</option><option>Invoice</option><option>Bank transfer</option></select></div>
+      <div class="field"><label for="w-po">PO number</label><input id="w-po" type="text" autocomplete="off"></div>
+      <div class="check full"><input id="w-ok" type="checkbox"><label for="w-ok">I confirm this order</label></div></div>
+      <div class="actions"><button id="place">Place order</button></div>`,
+};
+function render(n) {
+  document.querySelectorAll('.steps span').forEach((s) => s.classList.toggle('on', s.dataset.s == n));
+  $('stage').innerHTML = typeof STEPS[n] === 'function' ? STEPS[n]() : STEPS[n];
+  $('err').textContent = '';
+  wire(n);
+}
+function loading(next) {          // async transition: the old step disappears, a spinner shows, a new DOM is built
+  $('stage').innerHTML = '<div class="spinner" aria-busy="true">Loading…</div>';
+  setTimeout(next, 450 + Math.random() * 300);
+}
+function wire(n) {
+  if (n === 1) $('next1').onclick = () => {
+    Object.assign(order, { name: $('w-name').value, addr: $('w-addr').value, city: $('w-city').value, zip: $('w-zip').value });
+    if (!order.name || !order.addr || !order.city || !order.zip) return ($('err').textContent = 'Please fill every shipping field.');
+    loading(() => render(2));
+  };
+  if (n === 2) {
+    $('back2').onclick = () => loading(() => render(1));
+    $('next2').onclick = () => {
+      Object.assign(order, { speed: (document.querySelector('input[name=spd]:checked') || {}).value || '', gift: $('w-gift').checked, note: $('w-note').value });
+      if (!order.speed) return ($('err').textContent = 'Choose a delivery speed.');
+      loading(() => render(3));
+    };
+  }
+  if (n === 3) $('place').onclick = async () => {
+    Object.assign(order, { pay: $('w-pay').value, po: $('w-po').value, ok: $('w-ok').checked });
+    const task = await Bench.task;
+    const actual = { 'Full name': order.name, 'Address': order.addr, 'City': order.city, 'Postal code': order.zip,
+      'Delivery speed': order.speed, 'Add gift wrap': order.gift, 'Delivery note': order.note,
+      'Payment method': order.pay, 'PO number': order.po, 'I confirm this order': order.ok };
+    const errs = Bench.diff(task.data, actual);
+    if (errs.length) return Bench.reject(errs, $('err'));
+    $('stage').innerHTML = '<div class="spinner" aria-busy="true">Placing order…</div>';
+    setTimeout(() => { $('stage').innerHTML = '<h2>Order NW-90412 confirmed</h2>'; Bench.finish($('stage')); }, 500);
+  };
+}
+render(1);
+</script>
+</body></html>

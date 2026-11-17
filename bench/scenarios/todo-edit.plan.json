@@ -1,0 +1,2 @@
+{"steps":[{"fill":"What needs to be done?","value":"Beta task"},{"keys":"Enter","expect":{"text":"1 item left"}},
+{"dblclick":"Beta task"},{"keys":"Control+A"},{"type":"Beta edited"},{"keys":"Enter","expect":{"text":"Beta edited"}}]}

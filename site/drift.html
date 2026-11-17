@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profile settings</title><link rel="stylesheet" href="style.css"></head>
+<body data-scenario="drift">
+<main><div class="card">
+  <h1>Profile settings</h1><p class="sub">This page reshuffles its layout, ids and some labels on every load.</p>
+  <form id="f" novalidate><div class="grid2" id="g"></div>
+    <div class="actions"><button type="submit" id="save"></button></div>
+    <div class="errors" id="err"></div></form>
+</div></main>
+<script src="bench.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const rid = () => 'f_' + Math.random().toString(36).slice(2, 8);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
+// key = canonical name used for validation; labels vary between loads (synonyms a human would accept)
+const FIELDS = [
+  { key: 'Display name', labels: ['Display name', 'Public display name'], html: (id) => `<input id="${id}" name="${rid()}" type="text" autocomplete="off">` },
+  { key: 'Email address', labels: ['Email address', 'Email'], html: (id) => `<input id="${id}" name="${rid()}" type="email" autocomplete="off">` },
+  { key: 'Phone', labels: ['Phone', 'Phone number', 'Mobile phone'], html: (id) => `<input id="${id}" name="${rid()}" type="tel" autocomplete="off">` },
+  { key: 'Website', labels: ['Website', 'Personal website'], html: (id) => `<input id="${id}" name="${rid()}" type="url" autocomplete="off">` },
+  { key: 'Time zone', labels: ['Time zone', 'Timezone'], html: (id) => `<select id="${id}"><option value="">Choose…</option>${shuffle(['(UTC+00:00) London', '(UTC+03:00) Amman', '(UTC-06:00) Central Time', '(UTC+05:30) Kolkata']).map((o) => `<option>${o}</option>`).join('')}</select>` },
+  { key: 'Language', labels: ['Language', 'Display language'], html: (id) => `<select id="${id}"><option value="">Choose…</option>${shuffle(['Arabic', 'English', 'French', 'Spanish']).map((o) => `<option>${o}</option>`).join('')}</select>` },
+  { key: 'Two-factor authentication', labels: ['Two-factor authentication', 'Enable two-factor authentication'], check: true },
+];
+const ids = {};
+for (const f of shuffle(FIELDS)) {
+  const id = rid(); ids[f.key] = id;
+  const label = pick(f.labels);
+  const div = document.createElement('div');
+  if (f.check) { div.className = 'check full'; div.innerHTML = `<input id="${id}" type="checkbox"><label for="${id}">${label}</label>`; }
+  else { div.className = 'field' + (Math.random() < 0.3 ? ' full' : ''); div.innerHTML = `<label for="${id}">${label}</label>` + f.html(id); }
+  $('g').append(div);
+}
+$('save').textContent = pick(['Save changes', 'Save', 'Save profile']);
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const task = await Bench.task;
+  const actual = {};
+  for (const f of FIELDS) { const el = $(ids[f.key]); actual[f.key] = f.check ? el.checked : el.value; }
+  const errs = Bench.diff(task.data, actual);
+  if (errs.length) return Bench.reject(errs, $('err'));
+  $('err').textContent = '';
+  Bench.finish($('f'));
+});
+</script>
+</body></html>

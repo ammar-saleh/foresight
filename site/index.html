@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foresight test site</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main><div class="card">
+  <h1>Foresight test site</h1>
+  <p class="sub">Six scenarios built to break naive fast automation. Each one times itself from page load to a validated finish.</p>
+  <ul id="l"></ul>
+</div></main>
+<script>
+fetch('/tasks/tasks.json').then((r) => r.json()).then((t) => {
+  document.getElementById('l').innerHTML = Object.entries(t).map(([k, v]) => `<li><a href="${v.page}">${v.title}</a> — ${v.instruction}</li>`).join('');
+});
+</script>
+</body></html>

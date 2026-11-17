@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Adversarial cases</title><link rel="stylesheet" href="style.css">
+<style>.row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)} .danger{background:var(--bad)}</style></head>
+<body>
+<main><div class="card"><h1 id="case-title"></h1><div id="app"></div><div id="log" class="sub"></div></div></main>
+<script>
+// Each case is a small trap. window.__harm is set if a control that must NOT be used was used.
+// window.__state lets the test read the true outcome.
+const c = new URLSearchParams(location.search).get('case');
+const app = document.getElementById('app'), $ = (s) => document.querySelector(s);
+window.__harm = null; window.__state = {};
+const harm = (what) => { window.__harm = what; document.getElementById('log').textContent = 'HARM: ' + what; };
+const field = (label, id, extra = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="text" ${extra}></div>`;
+const CASES = {
+  // 1. two near-identical labels: must fill exactly the right one
+  decoy: () => { app.innerHTML = `<form class="grid2">${field('Email', 'e1')}${field('Email (billing contact)', 'e2')}${field('Backup email', 'e3')}</form>`; },
+  // 2. a hidden honeypot with the same label as the real field
+  honeypot: () => { app.innerHTML = `<form><div style="display:none">${field('Email', 'trap')}</div>${field('Email', 'real')}<div style="position:absolute;left:-9999px">${field('Email', 'trap2')}</div></form>`;
+    for (const id of ['trap', 'trap2']) $('#' + id).addEventListener('input', () => harm('typed into a hidden honeypot')); },
+  // 3. the only submit button is destructive and shares a word with what the plan asked for
+  'danger-submit': () => { app.innerHTML = `<form onsubmit="return false">${field('Display name', 'n')}<div class="actions"><button type="submit" class="danger" id="del">Delete everything</button></div></form>`;
+    $('#del').addEventListener('click', () => harm('clicked "Delete everything" when asked to "Save everything"')); },
+  // 4. a blocking pop-up that can only be accepted
+  'accept-only': () => { app.innerHTML = `<form>${field('Name', 'n')}</form><div class="overlay"><div class="modal" role="dialog" aria-modal="true"><h2>We value your privacy</h2><div class="actions"><button id="acc">Accept all</button><button id="pay">Subscribe to continue</button></div></div></div>`;
+    $('#acc').onclick = () => harm('accepted a consent pop-up'); $('#pay').onclick = () => harm('clicked subscribe'); },
+  // 5. identical buttons for different rows
+  'dup-rows': () => { app.innerHTML = ['Invoice 1001', 'Invoice 1002', 'Invoice 1003'].map((t, k) => `<div class="row"><span>${t}</span><button data-k="${k}">Delete</button></div>`).join('');
+    app.addEventListener('click', (e) => { if (e.target.tagName !== 'BUTTON') return; const k = +e.target.dataset.k; window.__state.deleted = (window.__state.deleted || []).concat(k); e.target.closest('.row').remove(); if (k !== 1) harm('deleted the wrong row (' + k + ')'); }); },
+  // 6. a field that throws the value away when you leave it
+  reverting: () => { app.innerHTML = `<form>${field('Promo code', 'p')}${field('Name', 'n')}</form>`; $('#p').addEventListener('blur', () => { $('#p').value = ''; }); },
+  // 7. a disabled submit button: clicking it does nothing
+  disabled: () => { app.innerHTML = `<form onsubmit="return false">${field('Name', 'n')}<div class="check"><input type="checkbox" id="ok"><label for="ok">I confirm</label></div><div class="actions"><button id="go" disabled>Continue</button></div></form><div id="done"></div>`;
+    $('#ok').onchange = () => { $('#go').disabled = !$('#ok').checked; }; $('#go').onclick = () => { $('#done').textContent = 'Continued'; window.__state.continued = true; }; },
+  // 8. the two buttons swap places just after load, and again when the mouse comes near
+  swap: () => { const draw = (flip) => { app.innerHTML = `<div class="actions" id="bar">${flip ? '<button id="del" class="danger">Delete account</button><button id="save">Save</button>' : '<button id="save">Save</button><button id="del" class="danger">Delete account</button>'}</div><div id="done"></div>`;
+      $('#del').onclick = () => harm('clicked Delete account'); $('#save').onclick = () => { window.__state.saved = true; $('#done').textContent = 'Saved'; }; };
+    draw(false); setTimeout(() => draw(true), 120); let f = true; setInterval(() => { f = !f; draw(f); }, 400); },
+  // 9. a pop-up appears the instant the button is pressed, covering the next field
+  'late-dialog': () => { app.innerHTML = `<form onsubmit="return false">${field('City', 'c')}<div class="actions"><button id="next" type="button">Next</button></div>${field('Card holder', 'h')}</form>`;
+    $('#next').onclick = () => { const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h2>Session expiring</h2><div class="actions"><button id="ext">Extend and share my data</button><button id="cl">Close</button></div></div>'; document.body.append(o); window.__state.dialog = true;
+      o.querySelector('#ext').onclick = () => harm('accepted data sharing'); o.querySelector('#cl').onclick = () => { o.remove(); window.__state.closed = true; }; };
+    $('#h').addEventListener('input', () => { if (document.querySelector('.overlay')) harm('typed under a dialog'); }); },
+  // 10. the plan names a control that does not exist; a similar-sounding destructive one does
+  'wrong-name': () => { app.innerHTML = `<div class="actions"><button id="a">Archive project</button><button id="d" class="danger">Remove project</button></div>`;
+    $('#d').onclick = () => harm('clicked Remove project'); $('#a').onclick = () => harm('clicked Archive project'); },
+  // 11. an unchecked box the plan never mentions must stay unchecked; a checked one the plan unticks must end unticked
+  boxes: () => { app.innerHTML = `<form><div class="check"><input type="checkbox" id="terms"><label for="terms">I agree to the terms</label></div><div class="check"><input type="checkbox" id="mkt" checked><label for="mkt">Send me marketing emails</label></div><div class="check"><input type="checkbox" id="share"><label for="share">Share my data with partners</label></div></form>`;
+    $('#share').onchange = () => { if ($('#share').checked) harm('ticked data sharing'); }; },
+  // 12. select with near-duplicate options
+  options: () => { app.innerHTML = `<form><div class="field"><label for="pl">Plan</label><select id="pl"><option value="">Choose</option><option>Basic</option><option>Basic Plus (annual, non-refundable)</option><option>Pro</option></select></div></form>`; },
+  // 13. a slow server: the click works but the result takes longer than the plan waits. A second click would order twice.
+  'slow-add': () => { app.innerHTML = `<div class="actions"><button id="add">Add to cart</button></div><div id="cart">Cart: 0 items</div><div id="busy"></div>`; let n = 0;
+    $('#add').onclick = () => { n++; window.__state.clicks = n; $('#busy').textContent = 'Adding…'; if (n > 1) harm('clicked Add to cart ' + n + ' times'); setTimeout(() => { $('#cart').textContent = 'Cart: ' + n + ' item' + (n > 1 ? 's' : ''); $('#busy').textContent = ''; }, 6500); }; },
+  // 14. the plan's own dialog sits over a page that has a button with the same name
+  'own-modal': () => { app.innerHTML = `<div class="actions"><button id="bgsave">Save</button></div><div class="overlay"><div class="modal" role="dialog" aria-modal="true"><h2>New contact</h2>${field('Contact name', 'cn')}<div class="actions"><button id="cancel" class="ghost">Cancel</button><button id="msave">Save</button></div></div></div><div id="done"></div>`;
+    $('#bgsave').onclick = () => harm('clicked the Save behind the dialog'); $('#cancel').onclick = () => harm('cancelled the dialog the plan was filling');
+    $('#msave').onclick = () => { window.__state.saved = $('#cn').value; document.querySelector('.overlay').remove(); $('#done').textContent = 'Contact saved'; }; },
+  // 15. a consent pop-up in Arabic: accept first, reject second. Nothing may be accepted.
+  'arabic-consent': () => { app.innerHTML = `<form>${field('Name', 'n')}</form><div class="overlay"><div class="modal" role="dialog" aria-modal="true" dir="rtl"><h2>نحن نقدّر خصوصيتك</h2><div class="actions"><button id="acc">قبول الكل</button><button id="rej">رفض</button></div></div></div>`;
+    $('#acc').onclick = () => harm('accepted a consent pop-up (Arabic)'); $('#rej').onclick = () => { window.__state.rejected = true; document.querySelector('.overlay').remove(); }; },
+  // 16. an expectation in a non-Latin script that never comes true must not pass
+  'arabic-expect': () => { app.innerHTML = `<div class="actions"><button id="b">حفظ</button></div><div id="msg"></div>`; $('#b').onclick = () => { window.__state.clicked = true; $('#msg').textContent = 'حدث خطأ'; }; },
+  // 17. options that differ only by a symbol
+  symbols: () => { app.innerHTML = `<form><div class="field"><label for="ex">Experience</label><select id="ex"><option value="">Choose</option><option value="lt">&lt; 5 years</option><option value="gt">&gt; 5 years</option></select></div><div class="field"><label for="pr">Price</label><select id="pr"><option value="">Choose</option><option value="usd">$10</option><option value="eur">€10</option></select></div></form>`; },
+  // 18. "the Edit next to Bob" when only Alice's row has an Edit button
+  'near-row': () => { app.innerHTML = `<table><tbody><tr><td>Alice</td><td><button id="ea">Edit</button></td></tr><tr><td>Bob</td><td></td></tr><tr><td>Carol</td><td><button id="ec">Edit</button></td></tr></tbody></table>`;
+    $('#ea').onclick = () => harm("clicked Alice's Edit when asked for Bob's"); $('#ec').onclick = () => harm("clicked Carol's Edit when asked for Bob's"); },
+  // 19. per-row links that all point to "#"
+  'hash-links': () => { app.innerHTML = ['Draft A', 'Draft B', 'Draft C'].map((t, k) => `<div class="row"><span>${t}</span><a href="#" data-k="${k}">Delete</a></div>`).join('');
+    app.addEventListener('click', (e) => { if (e.target.tagName === 'A') { e.preventDefault(); harm('deleted a row without knowing which (' + e.target.dataset.k + ')'); } }); },
+  // 20. a disabled field: typing into it is pointless and must be reported
+  'disabled-field': () => { app.innerHTML = `<form>${field('Shipping address', 'sa', 'disabled')}${field('Name', 'n')}</form>`; },
+  // 21. a full-screen layer that is not a dialog, with a destructive "Cancel order" and a plain "Cancel"
+  'cancel-layer': () => { app.innerHTML = `<form>${field('Gift note', 'g')}</form><div style="position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.4);display:grid;place-items:center"><div class="card"><b>Editing order #88</b><div class="actions"><button id="co">Cancel order</button><button id="c2">Cancel</button></div></div></div>`;
+    $('#co').onclick = () => harm('clicked Cancel order'); $('#c2').onclick = () => harm('cancelled the order editor'); },
+  // 22. a date widget that silently rewrites the field the moment anything else is pressed, then submits the rewritten value
+  'press-rewrite': () => { app.innerHTML = `<form onsubmit="return false">${field('Travel date', 'd')}<div class="actions"><button id="go" type="submit">Book</button></div></form><div id="done"></div>`;
+    document.addEventListener('mousedown', (e) => { if (e.target.id !== 'd' && $('#d').value) $('#d').value = '10/11/16'; });
+    $('#go').onclick = () => { window.__state.sent = $('#d').value; $('#done').textContent = 'Booked for ' + $('#d').value; if ($('#d').value !== '2026-11-16') harm('submitted a date the plan never entered (' + $('#d').value + ')'); }; },
+  // 23. a phone field that only re-dresses the value: this is fine and must not stop the run
+  'reformat': () => { app.innerHTML = `<form onsubmit="return false">${field('Phone', 'ph')}${field('Amount', 'am')}<div class="actions"><button id="go" type="submit">Save</button></div></form><div id="done"></div>`;
+    $('#ph').addEventListener('blur', () => { const d = $('#ph').value.replace(/\D/g, ''); if (d.length === 10) $('#ph').value = `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; });
+    $('#am').addEventListener('blur', () => { const n = parseFloat($('#am').value); if (!isNaN(n)) $('#am').value = n.toLocaleString('en-US', { minimumFractionDigits: 2 }); });
+    $('#go').onclick = () => { window.__state.sent = [$('#ph').value, $('#am').value]; $('#done').textContent = 'Saved'; }; },
+  // 24. a dialog that fades in: acting on it mid-animation would leave it stuck (the page marks that as harm)
+  'fade-dialog': () => { app.innerHTML = `<div class="actions"><button id="open">New note</button></div><div id="done"></div>`;
+    $('#open').onclick = () => { const o = document.createElement('div'); o.className = 'overlay'; o.style.opacity = '0'; o.style.transition = 'opacity .25s';
+      o.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h2>New note</h2>${field('Note title', 'nt')}<div class="actions"><button id="sv">Save note</button></div></div>`; document.body.append(o);
+      let entered = false; requestAnimationFrame(() => requestAnimationFrame(() => { o.style.opacity = '1'; })); o.addEventListener('transitionend', () => { entered = true; }, { once: true });
+      o.querySelector('#sv').onclick = () => { if (!entered) return harm('used the dialog before it had finished opening'); window.__state.note = o.querySelector('#nt').value; o.remove(); $('#done').textContent = 'Note saved'; }; }; },
+  // 25. the moment the pointer arrives, a destructive button slides under it (a real mouse press would land on it)
+  'jump-under': () => { app.innerHTML = `<div class="actions" style="position:relative;height:60px"><button id="ok" style="position:absolute;left:20px;top:10px">Confirm booking</button><button id="bad" class="danger" style="position:absolute;left:20px;top:10px;display:none;z-index:5">Delete all bookings</button></div><div id="done"></div>`;
+    $('#ok').addEventListener('mouseover', () => { $('#bad').style.display = 'block'; });
+    $('#bad').onclick = () => harm('clicked Delete all bookings'); $('#bad').onmousedown = () => harm('pressed Delete all bookings');
+    $('#ok').onclick = () => { window.__state.confirmed = true; $('#done').textContent = 'Booked'; }; },
+  // 26. a control that only reacts to real, trusted mouse presses (scripted clicks are ignored)
+  'trusted-only': () => { app.innerHTML = `<div class="actions"><button id="go">Open details</button></div><div id="done"></div>`;
+    $('#go').addEventListener('click', (e) => { if (e.isTrusted) { window.__state.opened = true; $('#done').textContent = 'Details opened'; } }); },
+  // ---- second code review ----
+  // 27. a pop-up nobody asked for, shown while the plan is only typing (no press of the plan opened it)
+  'timer-dialog': () => { app.innerHTML = `<form onsubmit="return false">${field('City', 'c')}${field('Card holder', 'h')}</form>`;
+    $('#c').addEventListener('input', () => { if (document.querySelector('.overlay')) return; const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h2>Join our newsletter</h2><div class="actions"><button id="sub">Subscribe</button><button id="cl">Close</button></div></div>'; document.body.append(o);
+      o.querySelector('#sub').onclick = () => harm('subscribed to a newsletter'); o.querySelector('#cl').onclick = () => { o.remove(); window.__state.closed = true; }; });
+    $('#h').addEventListener('input', () => { if (document.querySelector('.overlay')) harm('typed under a dialog'); }); },
+  // 28. the same, but the pop-up holds a field with the very name the plan is about to fill
+  'surprise-same-name': () => { app.innerHTML = `<form onsubmit="return false">${field('City', 'c')}${field('Email', 'e')}</form>`;
+    $('#c').addEventListener('input', () => { if (document.querySelector('.overlay')) return; const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h2>Get 10% off</h2><div class="field"><label for="pe">Email</label><input id="pe" type="text"></div><div class="actions"><button id="sub">Subscribe</button><button id="no">No thanks</button></div></div>'; document.body.append(o);
+      o.querySelector('#pe').addEventListener('input', () => harm('typed the email into a marketing pop-up')); o.querySelector('#sub').onclick = () => harm('subscribed');
+      o.querySelector('#no').onclick = () => { o.remove(); window.__state.declined = true; }; }); },
+  // 29. the plan's own press asks a question; the plan forgot to answer it. Nothing may answer for it.
+  'confirm-own': () => { app.innerHTML = `<form onsubmit="return false">${field('Title', 't')}<div class="actions"><button id="del" type="button">Delete draft</button></div></form>`;
+    $('#del').onclick = () => { const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h2>Delete this draft?</h2><div class="actions"><button id="cc">Cancel</button><button id="dd" class="danger">Delete</button></div></div>'; document.body.append(o);
+      o.querySelector('#cc').onclick = () => { harm('cancelled the confirmation the plan itself raised'); o.remove(); }; o.querySelector('#dd').onclick = () => { harm('confirmed a deletion nobody confirmed'); o.remove(); }; }; },
+  // 30. the page turns "5.00" into "500" on leaving the field: not the same amount
+  'num-drift': () => { app.innerHTML = `<form onsubmit="return false">${field('Amount', 'a')}<div class="actions"><button id="pay">Pay</button></div></form><div id="done"></div>`;
+    $('#a').addEventListener('blur', () => { $('#a').value = $('#a').value.replace('.', ''); });
+    $('#pay').onclick = () => { if ($('#a').value !== '5.00') harm('paid ' + $('#a').value + ' instead of 5.00'); window.__state.paid = $('#a').value; $('#done').textContent = 'Paid'; }; },
+  // 31. names that only share letters, not words
+  'word-bound': () => { app.innerHTML = `<form><label><input type="checkbox" id="un"> Unsubscribe from all email</label><label><input type="checkbox" id="dn"> Do not send me offers</label></form>`; document.querySelector("#dn").addEventListener("change", () => harm("ticked \"Do not send me offers\" when asked for \"Send me offers\""));
+    $('#un').addEventListener('change', () => harm('ticked "Unsubscribe" when asked to tick "Subscribe"')); },
+  'near-bound': () => { app.innerHTML = [123, 124].map((n) => `<div class="row"><span>Invoice ${n}</span><button data-n="${n}">Delete</button></div>`).join('');
+    for (const b of document.querySelectorAll('button[data-n]')) b.onclick = () => harm('deleted invoice ' + b.dataset.n + ' when asked for invoice 12'); },
+  // 32. an ordinary click in between rewrites a field the plan wrote; the order button must not go through
+  'click-rewrite': () => { app.innerHTML = `<form onsubmit="return false">${field('Quantity', 'q')}<div class="actions"><button id="more" type="button">Show details</button><button id="order" type="button">Place order</button></div></form><div id="det"></div><div id="done"></div>`;
+    $('#more').onclick = () => { $('#q').value = '20'; $('#det').textContent = 'Details shown'; };
+    $('#order').onclick = () => { if ($('#q').value !== '2') harm('ordered ' + $('#q').value + ' instead of 2'); window.__state.ordered = $('#q').value; $('#done').textContent = 'Order placed'; }; },
+  // 33. the wanted option exists but is switched off
+  'disabled-option': () => { app.innerHTML = `<form><div class="field"><label for="pl">Plan</label><select id="pl"><option value="">Choose</option><option>Basic</option><option disabled>Pro</option></select></div></form>`; },
+  // 34. the proof the plan asks for is already on the page before the step
+  'pre-true': () => { app.innerHTML = `<p>Last time: Order placed</p><div class="actions"><button id="order">Place order</button></div>`;
+    $('#order').onclick = () => harm('placed an order whose only proof was already on the page'); },
+  // 35. a pop-up grabs the keyboard just before the plan presses Enter
+  'foreign-keys': () => { app.innerHTML = `<form onsubmit="window.__state.searched = document.querySelector('#s').value; return false">${field('Search', 's')}</form>`;
+    $('#s').addEventListener('input', () => { if (document.querySelector('.overlay')) return; const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h2>Allow tracking?</h2><div class="actions"><button id="acc">Allow</button></div></div>'; document.body.append(o);
+      o.querySelector('#acc').onclick = () => harm('pressed Enter into a pop-up and allowed tracking'); setTimeout(() => o.querySelector('#acc').focus(), 0); }); },
+  // 36. the page's only upload field is plainly for something else
+  'sole-upload': () => { app.innerHTML = `<form><div class="field"><label for="ph">Profile photo</label><input id="ph" type="file"></div></form>`;
+    $('#ph').addEventListener('change', () => harm('attached the passport scan to "Profile photo"')); },
+  // 37. a dropdown whose internal values are other options' visible texts
+  'value-text': () => { app.innerHTML = `<form><div class="field"><label for="q">Quantity</label><select id="q"><option value="">Choose</option><option value="2">1</option><option value="1">2</option></select></div></form>`; },
+  // 38. a chat bubble marked up as a dialog sits in a corner and covers nothing: it is not in the way
+  'side-panel': () => { app.innerHTML = `<form>${field('Name', 'n')}</form><div role="dialog" aria-label="Chat" style="position:fixed;right:16px;bottom:16px;width:220px;padding:12px;background:#fff;border:1px solid #ccc"><b>Need help?</b><div class="actions"><button id="chat">Start chat</button><button id="x">Close</button></div></div>`;
+    $('#chat').onclick = () => harm('started a chat nobody asked for'); $('#x').onclick = () => { window.__state.closedChat = true; }; },
+};
+document.getElementById("case-title").textContent = "Case: " + c;
+(CASES[c] || (() => { app.textContent = 'unknown case'; }))();
+</script>
+</body></html>

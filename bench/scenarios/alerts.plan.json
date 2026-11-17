@@ -1,0 +1,1 @@
+{"steps":[{"click":"Click for JS Alert","expect":{"text":"You successfully clicked an alert"}},{"click":"Click for JS Confirm","dialog":"accept","expect":{"text":"You clicked: Ok"}}]}
