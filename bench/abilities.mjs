@@ -4,6 +4,7 @@
 // Usage: node bench/abilities.mjs [runs=3]      (needs the local test server on :4600)
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import './sample.mjs';
 import { Foresight } from '../engine/foresight.js';
 
 const RUNS = Number(process.argv[2] || 3);

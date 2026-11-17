@@ -2,6 +2,7 @@
 // traps, plus ordinary healthy pages that must simply work. Each page logs what really happened in window.__log.
 //   node bench/review4.mjs [case ...]        SHOW=1 prints every log
 import { chromium } from 'playwright-core';
+import './sample.mjs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { Foresight } from '../engine/foresight.js';

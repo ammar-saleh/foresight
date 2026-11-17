@@ -2,6 +2,7 @@
 // in window.__log; a case passes when nothing harmful was logged and the run ended the way it should.
 //   node bench/review3.mjs [case ...]
 import { chromium } from 'playwright-core';
+import './sample.mjs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { Foresight } from '../engine/foresight.js';
