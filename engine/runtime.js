@@ -127,6 +127,15 @@ export function foresightRuntime() {
     for (let n = w.nextNode(); n; n = w.nextNode()) if (!n.parentElement.closest('select,textarea,datalist,button')) t += ' ' + n.textContent;
     return flat(t);
   }
+  // What a row of a menu or tree says for itself: the rows of a list nested inside it have names of their own.
+  const NESTED = 'ul,ol,[role=menu],[role=group],[role=tree],[role=listbox]';
+  function rowText(el) {
+    if (!el.querySelector(NESTED)) return textOf(el);
+    const inner = (p) => { const c = p.closest(NESTED); return !!c && c !== el && el.contains(c); };
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let t = '';
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.trim() && !inner(n.parentElement) && visible(n.parentElement)) t += ' ' + n.data;
+    return flat(t) || textOf(el);
+  }
   // What a person can read on or beside the control.
   function visibleNames(el) {
     const out = [];
@@ -134,12 +143,19 @@ export function foresightRuntime() {
     const lb = el.getAttribute('aria-labelledby');
     if (lb) out.push(lb.split(/\s+/).map((id) => textOf(document.getElementById(id))).join(' '));
     const ph = el.getAttribute('placeholder'); if (ph) out.push(flat(ph));
-    if (/^(BUTTON|A|LI|SUMMARY)$/.test(el.tagName) || /button|option|link|menuitem|tab|switch|checkbox|radio|treeitem/.test(el.getAttribute('role') || '')) out.push(textOf(el).slice(0, 200));
+    if (/^(BUTTON|A|LI|SUMMARY)$/.test(el.tagName) || /button|option|link|menuitem|tab|switch|checkbox|radio|treeitem/.test(el.getAttribute('role') || '')) out.push(rowText(el).slice(0, 200));
     if (el.tagName === 'INPUT' && /submit|button|reset/.test(el.type)) out.push(flat(el.value));
     return out.filter(Boolean);
   }
   // Labels that are not shown (they are what the look prints for an icon-only control).
-  const hiddenNames = (el) => ['aria-label', 'title'].map((a) => el.getAttribute(a)).filter(Boolean).map(flat);
+  const hiddenNames = (el) => {
+    const own = ['aria-label', 'title'].map((a) => el.getAttribute(a)).filter(Boolean).map(flat);
+    if (own.length || !/^(BUTTON|A)$/.test(el.tagName) && el.getAttribute('role') !== 'button') return own;
+    // a button that holds only a picture: what the picture is called
+    const pic = el.querySelector('[aria-label],img[alt],svg > title');
+    const said = pic ? flat(pic.getAttribute('aria-label') || pic.getAttribute('alt') || (pic.tagName.toLowerCase() === 'title' ? pic.textContent : '') || '') : '';
+    return said && !textOf(el) ? [said] : own;
+  };
   function namesOf(el) {
     const vis = visibleNames(el), hid = hiddenNames(el);
     // a control whose only visible "text" is a symbol (an arrow, a cross) goes by its label first
@@ -226,8 +242,19 @@ export function foresightRuntime() {
     if (!n.isConnected) { floaters.delete(n); return false; }
     if (!visible(n) || getComputedStyle(n).position !== 'fixed' || !coversMuch(n) || n.matches(DIALOG) || n.querySelector(DIALOG) || n.closest(DIALOG)) return false;
     if (!n.querySelector(CONTROL + ',' + CLICKABLE)) return false;
-    const r = n.getBoundingClientRect(), x = Math.max(1, Math.min(innerWidth - 1, r.left + r.width / 2)), y = Math.max(1, Math.min(innerHeight - 1, r.top + r.height / 2));
-    return document.elementsFromPoint(x, y).some((o) => o !== document.documentElement && o !== document.body && !n.contains(o) && !o.contains(n) && visible(o));
+    // a side bar or menu pinned beside the page is part of the page, not something in front of it
+    if (n.closest('nav,aside,[role=navigation],[role=complementary]')) return false;
+    // "in front of the page" means that something of the page (words, a control, a picture) lies beneath it somewhere
+    const r = n.getBoundingClientRect(), L = Math.max(0, r.left), T = Math.max(0, r.top), R = Math.min(innerWidth, r.right), B = Math.min(innerHeight, r.bottom);
+    const stuff = (o, x, y) => {
+      if (o.matches(CONTROL + ',' + CLICKABLE + ',img,svg,canvas,video,picture')) return true;
+      for (const c of o.childNodes) { if (c.nodeType !== 3 || !c.data.trim()) continue; const q = textRect(c); if (x >= q.left - 2 && x <= q.right + 2 && y >= q.top - 2 && y <= q.bottom + 2) return true; }
+      return false; };
+    for (let a = 1; a <= 5; a++) for (let b = 1; b <= 5; b++) {
+      const x = Math.min(innerWidth - 1, L + (R - L) * a / 6), y = Math.min(innerHeight - 1, T + (B - T) * b / 6);
+      if (document.elementsFromPoint(x, y).some((o) => o !== document.documentElement && o !== document.body && !n.contains(o) && !o.contains(n) && visible(o) && stuff(o, x, y))) return true;
+    }
+    return false;
   }
   const openDialogs = () => { const a = [...qsa(DIALOG)].filter(visible); for (const f of [...floaters]) if (liveFloater(f) && !a.some((d) => d.contains(f) || f.contains(d))) a.push(f); return a; };
   const topDialog = () => openDialogs().at(-1) || null;
@@ -258,6 +285,8 @@ export function foresightRuntime() {
     }
     return false;
   }
+  // A see-through tick box laid over its own label (a menu button drawn as a label): a press on it is a press on the label.
+  const labelledBy = (hit, el) => hit.nodeType === 1 && !!hit.labels && [...hit.labels].some((l) => l === el || within(el, l) || within(l, el));
   let lastBlocker = null;                                   // the element that actually covers the control of the step in hand
   let curTarget = null;                                     // that control
   let lastTouch = -Infinity;                                // when the plan last typed into something in this document
@@ -273,7 +302,7 @@ export function foresightRuntime() {
       if (!hit) continue;
       if (hit === el || within(hit, el) || (hit.tagName === 'LABEL' && (hit.control === el || within(el, hit)))) return { ok: true, x, y };
       if (el.labels && [...el.labels].some((l) => within(hit, l))) return { ok: true, x, y };
-      if (sameWidget(hit, el)) return { ok: true, x, y };
+      if (sameWidget(hit, el) || labelledBy(hit, el) || (el.editContext && el.parentElement && within(hit, el.parentElement))) return { ok: true, x, y };
       const ov = overlayOf(hit, el);
       if (ov && !blocker) { blocker = describe(ov); node = ov; }
       else if (!blocker) { blocker = describe(hit); node = hit; }
@@ -314,12 +343,12 @@ export function foresightRuntime() {
   }
 
   // ---------- resolution: plan target -> element, with a score and a uniqueness margin ----------
-  const CONTROL = 'input:not([type=hidden]),select,textarea,[contenteditable=true],[role=combobox],[role=textbox],[role=searchbox],[role=checkbox],[role=switch],[role=radio]';
+  const CONTROL = 'input:not([type=hidden]),select,textarea,[contenteditable=true],[role=combobox],[role=textbox],[role=searchbox],[role=checkbox],[role=switch],[role=radio],[role=slider]';
   const CLICKABLE = 'button,a[href],[role=button],input[type=submit],input[type=button],[role=link],[role=tab],[role=menuitem],[role=option],summary';
   const EXPANDABLE = '[aria-expanded],details';
   function kindOk(op, el) {
     const t = (el.type || '').toLowerCase();
-    if (op === 'fill') return (el.tagName === 'INPUT' && !/checkbox|radio|submit|button|file/.test(t)) || el.tagName === 'TEXTAREA' || el.isContentEditable;
+    if (op === 'fill') return (el.tagName === 'INPUT' && !/checkbox|radio|submit|button|file/.test(t)) || el.tagName === 'TEXTAREA' || el.isContentEditable || isSlider(el) || !!el.editContext;
     if (op === 'pick') return (el.tagName === 'INPUT' && !/checkbox|radio/.test(t)) || isOpener(el);
     if (op === 'select') return el.tagName === 'SELECT';
     if (op === 'check' || op === 'uncheck') return t === 'checkbox' || el.getAttribute('role') === 'checkbox' || el.getAttribute('role') === 'switch';
@@ -486,10 +515,44 @@ export function foresightRuntime() {
   const mine = (d) => infoOf(d).pressed || known(d);
   const dialogBrief = (d) => ({ text: textOf(d).slice(0, 160), buttons: [...new Set(qsa(CLICKABLE, d).filter(visible).map((b) => anyName(b).slice(0, 40)).filter(Boolean))].slice(0, 8), opened: infoOf(d).caused ? 'right after a step of this plan' : 'by the page itself' });
   const begins = (a, b) => { const x = words(norm(a).replace(/[\s:*.]+$/, '')), y = words(norm(b).replace(/[\s:*.]+$/, '')); const [long, short] = x.length >= y.length ? [x, y] : [y, x]; return short.length > 0 && short.length < long.length && short.every((w, i) => long[i] === w); };
+  // What a field's name stood for the first time this run used it. Fields named by their placeholder, or by what
+  // was last chosen in them, lose that name the moment they are used; the control is still the same one.
+  let namedBefore = new Map();
+  // the row of a table or list a control sits in, by the first words of that row
+  function rowWord(el) {
+    const row = el.closest('tr,li,[role=row],[role=listitem]'); if (!row) return '';
+    const tw = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) { const tx = flat(n.data); if (tx.length > 1 && visible(n.parentElement) && !within(n.parentElement, el) && !n.parentElement.closest('label,button,select,option')) return `in the row "${tx.slice(0, 30)}"`; }
+    return '';
+  }
   function resolve(step) {
-    const r = resolveAny(step);
+    const alive = (el) => !!el && el.isConnected && shown(el) && kindOk(step.op, el);
+    // a retry of a step that has already typed into its field goes back to that very field
+    if (step.pin) { let el = null; try { el = qsa(step.pin)[0]; } catch {} if (alive(el)) return { el, score: 1, margin: 1, strategy: 'pinned' }; }
+    let r = resolveAny(step);
+    const t = step.target, key = (step.op === 'pick' || step.op === 'fill') && t && !t.css && !t.row && (t.label ?? t.text) != null ? step.op + JSON.stringify([t.label ?? null, t.text ?? null, t.near ?? null, t.nth ?? null]) : null;
+    if (key) {
+      const was = namedBefore.get(key), sure = !!r.el && r.score >= MATCH && confidence(step, r) >= (step.threshold ?? 0.9);
+      // counted by position, the count changes as names change: the earlier answer stands while that control is there
+      if (alive(was) && was !== r.el && (t.nth != null || !sure)) {
+        const keep = lastCandidates;
+        r = { el: was, score: 1, margin: 1, strategy: 'same-control', picked: `the control this plan reached by that name before${anyName(was) ? ` (it now reads "${anyName(was).slice(0, 40)}")` : ''}` };
+        lastCandidates = keep;
+      } else if (sure && !namedBefore.has(key)) namedBefore.set(key, r.el);
+    }
     if (r.el && strangers.has(r.el)) return { el: null, score: 0, margin: 0, strategy: r.strategy, unshown: true };
     return r;
+  }
+  const kindWord = (el) => (el.closest('th,[role=columnheader]') ? 'column header' : el.matches('a[href],[role=link]') ? 'link' : el.matches('button,[role=button],input[type=submit],input[type=button],summary') ? 'button' : el.matches('[role=option],option') ? 'option' : el.matches('[role^=menuitem]') ? 'menu item' : el.matches('[role=tab]') ? 'tab' : el.matches('[role=treeitem]') ? 'tree row' : isToggle(el) ? 'tick box' : isField(el) ? 'field' : el.tagName.toLowerCase());
+  // where on the page it is, in a few words: the pop-up, table or headed section it belongs to
+  function placeWord(el) {
+    if (el.closest(DIALOG)) return 'in the dialog';
+    if (el.closest('[role=listbox],[role=menu]') && !el.closest('main,article')) return 'in the open list';
+    for (let n = up(el), k = 0; n && n !== document.body && k < 8; n = up(n), k++) {
+      const h = n.matches('section,article,fieldset,form,li,tr,[role=group],[role=region]') || k > 1 ? [...n.children].find((c) => c.matches('h1,h2,h3,h4,h5,h6,legend,caption') && visible(c) && !c.contains(el)) : null;
+      if (h && textOf(h)) return `under "${textOf(h).slice(0, 40)}"`;
+    }
+    return '';
   }
   function resolveAny(step) {
     const t = step.target;
@@ -501,6 +564,8 @@ export function foresightRuntime() {
       let els = []; try { els = [...qsa(t.css)]; } catch { return { el: null, score: 0, margin: 0, strategy: 'css', badSelector: true }; }
       if (t.near) { const all = els; els = els.filter((e) => nearFactor(e, t.near, (o) => all.includes(o)) === 1); }
       els = els.filter((e) => shown(e) || els.length === 1);              // people count what they can see
+      // (a stale copy of a pop-up that the page parked far off the page is not something a person can see either)
+      if (els.length > 1) { const off = (e) => { const b = e.getBoundingClientRect(); return b.right + scrollX < -200 || b.bottom + scrollY < -200; }, on = els.filter((e) => !off(e)); if (on.length) els = on; }
       const total = els.length;
       if (t.nth) els = [nthOf(els)].filter(Boolean);
       if (!els.length) return { el: null, score: 0, margin: 0, strategy: 'css' };
@@ -523,6 +588,15 @@ export function foresightRuntime() {
         if (sc > 0.3) scored.push([el, sc]);
         if (sc > bestS) { bestS = sc; best = el; }
       }
+      if (clicky && best) {
+        const top = scored.filter(([, sc]) => sc >= bestS - 0.001), say = new Map(top.map(([o]) => [o, norm(textOf(o))]));
+        const outer = new Set(top.filter(([o]) => say.get(o) && top.some(([n]) => n !== o && within(n, o) && say.get(n) === say.get(o))).map(([o]) => o));
+        if (outer.size) {
+          const kept = scored.filter(([o]) => !outer.has(o));
+          if (outer.has(best)) best = (kept.find(([o, sc]) => sc >= bestS - 0.001 && within(o, best)) || [best])[0];
+          scored.length = 0; scored.push(...kept);
+        }
+      }
       return { best, bestS, scored, unseen };
     };
     let scope = document, both = false, found = active ? pass(active) : null;
@@ -536,6 +610,9 @@ export function foresightRuntime() {
     }
     const { best, bestS, scored, unseen } = found;
     lastCandidates = [...scored].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([el, sc]) => `${anyName(el).slice(0, 60)} (${sc.toFixed(2)})`);
+    { const top = [...scored].sort((a, b) => b[1] - a[1]).slice(0, 5);        // the same name several times: say what each one is
+      if (top.length > 1 && top[0][1] >= MATCH && top[1][1] >= top[0][1] - 0.001 && norm(anyName(top[0][0])) === norm(anyName(top[1][0])))
+        lastCandidates = [...top.map(([el, sc]) => `${anyName(el).slice(0, 60)} (${sc.toFixed(2)}, ${kindWord(el)}${placeWord(el) ? ', ' + placeWord(el) : ''})`), `${scored.filter(([, sc]) => sc >= top[0][1] - 0.001).length} controls go by that name: add "near" or "nth" to say which`]; }
     if (!lastCandidates.length) {                          // nothing came close: show the names that are spelt most like it
       const grams = (z) => { const tx = ' ' + norm(z) + ' ', g = new Set(); for (let i = 0; i < tx.length - 2; i++) g.add(tx.slice(i, i + 3)); return g; };
       const spelt = (a, b) => { const A = grams(a), B = grams(b); let n = 0; for (const x of A) if (B.has(x)) n++; return n / (A.size + B.size - n || 1); };
@@ -573,6 +650,17 @@ export function foresightRuntime() {
       const kin = scored.filter(([el]) => [...namesOf(el), isField(el) ? nearbyLabel(el) : ''].some((n) => n && begins(n, want)));
       if (kin.length === 1 && scored.filter(([, sc]) => sc >= 0.6).length === 1) return { el: kin[0][0], score: MATCH, margin: 1, strategy: 'kin', picked: `no field is named exactly that; used "${anyName(kin[0][0]).slice(0, 60)}", the only field whose name begins the same way` };
     }
+    // A tab or link that carries a count after its name ("Issues 44", "Inbox (3)"): the count is not part of the name.
+    // Only when exactly one control reads like that; never for an irreversible step.
+    if (bestS < MATCH && want != null && clicky && step.risk !== 'irreversible' && !t.nth) {
+      const w = norm(want), counted = scored.filter(([el]) => namesOf(el).some((n) => { const x = norm(n); return x.startsWith(w + ' ') && /\d/.test(x.slice(w.length)) && /^[\s\d.,()\[\]+km]+$/i.test(x.slice(w.length)); }));
+      if (w && counted.length === 1) return { el: counted[0][0], score: MATCH, margin: 1, strategy: 'counted', picked: `nothing is named exactly that; used "${anyName(counted[0][0]).slice(0, 60)}", the only control whose name is those words and a count` };
+    }
+    // Two fields of one name where one is a 1-pixel stand-in kept for screen readers or for the form: the real one
+    if (bestS >= MATCH && !clicky && !t.nth) {
+      const top = scored.filter(([, sc]) => sc >= bestS - 0.001).map(([el]) => el), real = top.filter((el) => { const b = el.getBoundingClientRect(); return b.width > 4 && b.height > 4; });
+      if (top.length > 1 && real.length === 1) return { el: real[0], score: bestS, margin: 1, strategy: 'semantic' };
+    }
     // Text that is not a button or link but is plainly meant to be pressed (div-based options, table headers, chips):
     // an element whose whole line reads exactly the wanted words. Never a fragment of something bigger that can be
     // pressed and says more than that.
@@ -594,6 +682,7 @@ export function foresightRuntime() {
       let deepest = hits.filter((el) => !hits.some((o) => o !== el && within(o, el)));
       if (t.near) { const all = deepest; deepest = deepest.filter((el) => nearFactor(el, t.near, (o) => all.includes(o)) === 1); }
       if (deepest.length && t.nth) { const pick = nthOf(deepest); if (pick) return { el: pick, score: 0.95, margin: 1, strategy: 'text-nth', picked: `match ${t.nth > 0 ? t.nth : deepest.length + t.nth + 1} of ${deepest.length} pieces of text reading "${textOf(pick).slice(0, 40)}"` }; }
+      if (deepest.length > 1) lastCandidates = [`${deepest.length} places on the page show exactly that text: add "near" or "nth" to say which`];
       if (deepest.length) return { el: deepest[0], score: 0.95, margin: deepest.length === 1 ? 1 : 0, strategy: 'text', picked: 'no button or link has that name; pressed the text itself' };
     }
     // A selector remembered from an earlier run counts only when the full search picks that very element again.
@@ -613,6 +702,29 @@ export function foresightRuntime() {
   }
 
   // ---------- low-level actions (framework-safe: native setters + real events) ----------
+  // A drawn slider (not an <input type=range>): it says where it stands, and moves with the arrow keys.
+  const isSlider = (el) => el.getAttribute?.('role') === 'slider' && el.tagName !== 'INPUT';
+  const sliderAt = (el) => { const v = el.getAttribute('aria-valuenow'); return v == null || v === '' ? NaN : Number(v); };
+  async function slide(el, value) {
+    const want = Number(value); if (!Number.isFinite(want)) return { no: 'a slider takes a number' };
+    const lo = Number(el.getAttribute('aria-valuemin') ?? NaN), hi = Number(el.getAttribute('aria-valuemax') ?? NaN);
+    if ((Number.isFinite(lo) && want < lo) || (Number.isFinite(hi) && want > hi)) return { no: `the slider goes from ${lo} to ${hi}` };
+    if (!Number.isFinite(sliderAt(el))) return { no: 'the slider does not say where it stands (no aria-valuenow), so nothing could confirm the value: drag it, or use "clickAt"' };
+    try { el.focus({ preventScroll: true }); } catch {}
+    const key = (k, code) => { for (const type of ['keydown', 'keyup']) el.dispatchEvent(new KeyboardEvent(type, { key: k, code: k, keyCode: code, which: code, bubbles: true, cancelable: true })); };
+    let right = 1, moved = false;                           // which way the right arrow moves it is found out on the first press
+    for (let n = 0; n < 400 && sliderAt(el) !== want; n++) {
+      const before = sliderAt(el), up = want > before;
+      if (up === right > 0) key('ArrowRight', 39); else key('ArrowLeft', 37);
+      await Promise.resolve(); if (sliderAt(el) === before) await frame();
+      const after = sliderAt(el);
+      if (after === before) return moved ? { no: `the slider stopped at ${before}`, acted: true } : { keys: true };
+      if (!moved && (after > before) !== up) { right = -right; moved = true; continue; }
+      moved = true;
+      if ((up && after > want) || (!up && after < want)) return { no: `the slider moves in steps: ${before} and ${after} are the nearest values it can show`, acted: true };
+    }
+    return sliderAt(el) === want ? { ok: true } : { no: 'the slider did not reach that value', acted: true };
+  }
   function setNative(el, v) {
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
@@ -719,7 +831,14 @@ export function foresightRuntime() {
   const saidNames = (el) => ['aria-label', 'title', 'aria-description', 'aria-valuetext'].map((a) => el.getAttribute(a)).filter(Boolean).map(norm);
   function verify(step, el) {
     switch (step.op) {
-      case 'fill': return el.isContentEditable ? flat(el.textContent) === flat(step.value) : (el.value === String(step.value) || (el.value !== '' && looseEq(el.value, step.value)));
+      case 'fill': {
+        if (isSlider(el)) return sliderAt(el) === Number(step.value);
+        // a code editor draws its text beside the surface that takes the keys: it must show the lines that were typed
+        if (el.editContext && !el.isContentEditable) { const sq = (x) => String(x ?? '').replace(/[\s​﻿ ]+/g, ''), host = el.closest('[role=code]') || el.parentElement; return sq(step.value) !== '' && !!host && sq(host.innerText).includes(sq(step.value)); }
+        // an editor draws each line as a block of its own: compare what it shows, whatever it puts between the lines
+        if (el.isContentEditable) { const sq = (x) => String(x ?? '').replace(/[\s​﻿]+/g, ''); return flat(el.textContent) === flat(step.value) || (sq(step.value) !== '' && sq(el.innerText) === sq(step.value)); }
+        return el.value === String(step.value) || (el.value !== '' && looseEq(el.value, step.value));
+      }
       case 'select': {
         const want = (Array.isArray(step.value) ? step.value : [step.value]).map((x) => flat(findOption(el, x)?.text ?? '\u0000' + x)).sort().join('|');
         return selectedTexts(el) === want;
@@ -732,14 +851,17 @@ export function foresightRuntime() {
         const want = norm(step.value); if (!want) return false;
         if (flat(el.value) && norm(el.value) === want) return true;
         const pf = pickProof.get(el);
+        // the field holds the line that was chosen, or part of it
+        if (pf?.line && flat(el.value ?? '')) { const vw = tokens(el.value); if (vw.size && [...vw].every((t) => pf.line.has(t))) return true; }
         // the control was renamed to say what was chosen (a flag button: "Change country, selected United States (+1)")
         if (pf?.name && el.isConnected && saidNames(el).some((n) => has(n, want))) return true;
         // the field shows a short form of the choice (a flag and "+1" for "United States +1"): the same short form, still there
         if (pf?.part && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && visible(d) && !(pf.menu.isConnected && within(d, pf.menu)) && textOf(d) === pf.part)) return true;
-        if (isOpener(el) || !(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return has(norm(ownText(el)), want);          // a custom dropdown shows its choice as its own text
         // multi-value widgets clear the input and show a chip instead: the one that appeared when the choice was made
         // (pages re-draw their chips, so the proof is "where it appeared and what was already there", not one node)
-        return !!pf && !!pf.old && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && !pf.old.has(d) && !(pf.menu.isConnected && within(d, pf.menu)) && visible(d) && sim(textOf(d), step.value) >= MATCH);
+        const chip = () => !!pf && !!pf.old && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && !pf.old.has(d) && !(pf.menu.isConnected && within(d, pf.menu)) && visible(d) && sim(textOf(d), step.value) >= MATCH);
+        if (isOpener(el) || !(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return has(norm(ownText(el)), want) || chip();          // a custom dropdown shows its choice as its own text
+        return chip();
       }
       default: return true;
     }
@@ -819,13 +941,15 @@ export function foresightRuntime() {
       if (!/^\d+$/.test(plain)) return false;                                                // only a plain run of digits can be "dressed" (a phone mask)
       const k = (x) => x.toLowerCase().replace(/(\d)[.,](?=\d)/g, '$1\u0001').replace(/[^\p{L}\p{N}\u0001]+/gu, '');
       if (/[.,]\d{1,2}$/.test(other) || (other.includes('.') && other.includes(','))) return false;      // that is a number with decimals, not a mask ("1234567" is not "12.345,67")
+      // (a phone field may put its own country code in front: "+7 (911) 555-01-42" for 9115550142)
+      if (plain.length >= 7 && /^\+\d{1,3}[\s(.-]/.test(other) && !/\p{L}/u.test(other)) { const d = other.replace(/\D+/g, ''); if (d.endsWith(plain) && d.length - plain.length <= 3 && other.replace(/^\+\d{1,3}/, '').replace(/\D+/g, '') === plain) return true; }
       return plain.length >= 7 ? other.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '') === plain : k(other) === plain;   // short ones: "1,5" is not "15"
     }
     // text: only capitals and spacing may differ. Punctuation is content ("john.doe@x.com" is not "johndoe@xcom").
     const t = (x) => x.toLowerCase().replace(/[\s\u00a0]+/g, ' ');
     return t(A) === t(B);
   };
-  const shownNow = (el) => (el.type === 'checkbox' || el.type === 'radio' || isToggle(el) ? isChecked(el) : el.isContentEditable ? flat(el.textContent) : el.value);
+  const shownNow = (el) => (el.type === 'checkbox' || el.type === 'radio' || isToggle(el) ? isChecked(el) : isSlider(el) ? sliderAt(el) : el.isContentEditable ? flat(el.textContent) : el.value);
   const emptied = (el) => !isToggle(el) && el.tagName !== 'SELECT' && (el.isContentEditable ? flat(el.textContent) === '' : el.value === '');
   const closeBy = (field, button) => { if (!button) return false; const f = button.form || button.closest?.('form'); if (field.form && field.form === f) return true; for (let n = up(field), k = 0; n && n !== document.body && k < 4; n = up(n), k++) if (within(button, n)) return true; return false; };
   // A press that can commit something happened: `by` is 'keys' (the focused field took it) or the element clicked.
@@ -870,7 +994,7 @@ export function foresightRuntime() {
   // A new run starts clean. A resumed run takes over the fields its earlier steps wrote: those that still hold their
   // value, and those that now hold a different one (so the difference is reported again instead of forgotten).
   function begin(seed, o = {}) {
-    pending = new Map();
+    pending = new Map(); namedBefore = new Map();
     for (const step of seed || []) {
       const r = resolveAny(step);
       if (r.el && r.score >= MATCH && kindOk(step.op, r.el) && shown(r.el) && (verify(step, r.el) || !emptied(r.el))) pending.set(step.op === 'radio' ? (r.el.name || r.el) : r.el, { step, el: r.el, used: false });
@@ -909,9 +1033,13 @@ export function foresightRuntime() {
     const g = guard; if (!g || !e.isTrusted) return;
     const hit = (e.composedPath && e.composedPath()[0]) || e.target;
     const el = g.el;
-    const inside = hit === el || within(hit, el) || (hit.tagName === 'LABEL' && (hit.control === el || within(el, hit))) || (el.labels && [...el.labels].some((l) => within(hit, l))) || (hit.nodeType === 1 && sameWidget(hit, el));
+    const inside = hit === el || within(hit, el) || (hit.tagName === 'LABEL' && (hit.control === el || within(el, hit))) || (el.labels && [...el.labels].some((l) => within(hit, l))) || (hit.nodeType === 1 && (sameWidget(hit, el) || labelledBy(hit, el)));
     const cancel = () => { e.stopImmediatePropagation(); e.preventDefault(); };
-    if (!inside) { if (!g.mishit) g.mishit = describe(hit.nodeType === 1 ? hit : hit.parentElement || document.body); cancel(); return; }
+    const box = () => { const q = el.getBoundingClientRect(); return [q.left, q.top, q.width, q.height].map(Math.round).join(); };
+    if (!inside) {
+      if (!g.mishit) { g.mishit = describe(hit.nodeType === 1 ? hit : hit.parentElement || document.body); g.stayed = g.down && g.box === box() && !within(el, hit); }
+      cancel(); return; }
+    if (!g.down && (e.type === 'pointerdown' || e.type === 'mousedown')) g.box = box();
     if (g.cancelled) { cancel(); return; }
     lastAct = performance.now();                                 // whatever the page opens from here on is its answer to this press
     // Re-read what the plan wrote before the press goes down, and again on release (by then every press-down handler
@@ -949,7 +1077,16 @@ export function foresightRuntime() {
     // click happened. A control that acts on the press alone has acted; one that waits for the click has not. Only an
     // expectation can tell which, so without one this is reported as unknown - and never pressed again.
     const viaDown = !g.hit && g.down;
-    if (viaDown && !step.expect) { acted(g.el); return done({ status: 'unsure', why: 'the press went down on the control, then the page moved and the release was cancelled. If the control acts on the press alone it has acted; if it waits for a full click it has not. Look at the page', acted: 'unknown', reacted: reacted() }); }
+    // The control did not move: what took the release is something the press itself opened on top of it (a calendar
+    // under a date field, a list under a button). That is the control's answer to the press, as a person would get it.
+    if (viaDown && g.stayed && g.el.isConnected && visible(g.el)) {
+      if (step.op === 'click') acted(g.el); else lastAct = performance.now();
+      const o = { status: 'ok', mayNavigate: false, reacted: true, opened: (g.mishit.text || g.mishit.tag).slice(0, 60) };
+      if (step.expect && !(await until(() => expectMet(step.expect), step.expect.timeout || 5000))) { noteDialogs(); return done({ status: 'timeout', why: 'expectation not met', expect: step.expect, acted: true, reacted: true }); }
+      await until(() => false, 60); noteDialogs();
+      return done(o);
+    }
+    if (viaDown && !step.expect) { acted(g.el); return done({ status: 'unsure', why: 'the press went down on the control, then the page moved and the release was cancelled. If the control acts on the press alone it has acted; if it waits for a full click it has not. Look at the page', released: g.mishit || undefined, acted: 'unknown', reacted: reacted() }); }
     if (!g.hit && !viaDown) return done({ status: 'moved', why: g.mishit ? 'the control moved or was covered at the moment of the press; the press was cancelled' : 'the press never arrived in this document', blocker: g.mishit, arrived: !!g.mishit, acted: false });
     if (step.op === 'click') acted(g.el); else lastAct = performance.now();     // a press on a button may use up what was typed; ticking a box does not
     const out = { status: 'ok', mayNavigate: g.el.isConnected && mayNavigate(g.el) };
@@ -981,7 +1118,12 @@ export function foresightRuntime() {
     if (el.tagName === 'DETAILS') { const sm = [...el.children].find((c) => c.tagName === 'SUMMARY'); return sm && visible(sm) ? sm : null; }
     if (el.matches('button,[role=button],[role=tab],summary,a[href]')) return el;
     // a plain header that carries the open/closed state itself (it holds no list or panel of its own)
-    if (!el.querySelector('ul,ol,[role=group],' + EXPANDABLE + ',' + CONTROL) && (getComputedStyle(el).cursor === 'pointer' || el.hasAttribute('tabindex') || el.hasAttribute('onclick'))) return el;
+    if (!el.querySelector('ul,ol,[role=group],' + EXPANDABLE + ',' + CONTROL) && (getComputedStyle(el).cursor === 'pointer' || el.hasAttribute('tabindex') || el.hasAttribute('onclick'))) {
+      // (pressed on its own words, so that a handler on an inner part of the row hears it too; never on a link inside it)
+      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = tw.nextNode(); n; n = tw.nextNode()) if (n.data.trim() && visible(n.parentElement)) { const p = n.parentElement, c = p.closest(CLICKABLE); return c && c !== el && el.contains(c) ? el : p; }
+      return el;
+    }
     const kids = [...el.querySelectorAll('*')].filter((d) => d.closest(EXPANDABLE) === el && visible(d));
     // its header: a button or link inside it that carries the node's own name
     const header = kids.find((d) => d.matches(CLICKABLE) && want != null && sim(anyName(d), want) >= MATCH);
@@ -1051,7 +1193,8 @@ export function foresightRuntime() {
       await settleFor(el);
       if (!el.isConnected) { stop('notfound', { why: 'the control was replaced while the page was still changing', closest: lastCandidates }); break; }
       // disabled / read-only controls do nothing: wait a moment for them to enable, otherwise say so
-      const inert = () => isDisabled(el) || ((step.op === 'fill' || step.op === 'pick') && el.readOnly === true);
+      const listBox = (x) => x.getAttribute('role') === 'combobox' || x.hasAttribute('aria-haspopup') || x.hasAttribute('aria-controls') || x.hasAttribute('aria-owns');
+      const inert = () => isDisabled(el) || (step.op === 'fill' && el.readOnly === true) || (step.op === 'pick' && el.readOnly === true && !listBox(el));
       if (inert()) await until(() => !inert(), 1200);
       if (inert()) { stop('disabled', { why: el.readOnly ? 'the field is read-only' : 'the control is disabled' }); break; }
 
@@ -1081,7 +1224,11 @@ export function foresightRuntime() {
         const over = openDialogs().find((d) => !within(el, d) && isModal(d) && !infoOf(d).helper);
         if (over) { lastBlocker = over; stop('interrupt', { trip: trip || { kind: 'overlay' }, dialog: dialogBrief(over) }); break; }
       }
-      if (step.op === 'fill' && el.isContentEditable) { stop('needs-keys', { why: 'rich-text editors only accept real typing' }); break; }
+      if (step.op === 'fill' && !kindOk('fill', el)) {      // (only a css target gets this far)
+        if (el.editContext || /^(textbox|searchbox)$/.test(el.getAttribute('role') || '')) { stop('needs-keys', { why: 'this editor only accepts real typing' }); break; }
+        stop('notfound', { why: `the selector points at a <${el.tagName.toLowerCase()}>, which is not a field that takes text: point at the field inside it, or click it and use a "type" step`, closest: [] }); break;
+      }
+      if (step.op === 'fill' && (el.isContentEditable || el.editContext)) { stop('needs-keys', { why: 'rich-text editors only accept real typing', surface: !!el.editContext && !el.isContentEditable }); break; }
       if (step.op === 'fill' && el.maxLength > 0 && String(step.value).length > el.maxLength) { stop('verify-failed', { why: `the field only accepts ${el.maxLength} characters and the value has ${String(step.value).length}`, acted: false }); break; }
       try { window.__fsProgress?.(step.i); } catch {}       // tell the engine which step is about to act
       const badSel = step.expect && ['selector', 'gone'].find((k) => { if (step.expect[k] == null) return false; try { document.querySelector(step.expect[k]); return false; } catch { return true; } });
@@ -1094,7 +1241,12 @@ export function foresightRuntime() {
       const reacted = () => mutations > 0 || location.href !== urlBefore;
       touched.add(el);
       try {
-        if (step.op === 'fill') { fill(el, String(step.value)); lastFilled = el; lastTouch = performance.now(); }
+        if (step.op === 'fill' && isSlider(el)) {
+          const sl = await slide(el, step.value); lastTouch = performance.now();
+          if (sl.keys) { watcher.disconnect(); popWatch.disconnect(); stop('needs-keys', { why: 'the slider only answers real arrow keys', slider: true }); break; }
+          if (sl.no) { watcher.disconnect(); popWatch.disconnect(); stop('verify-failed', { why: sl.no, acted: !!sl.acted, slider: true }); break; }
+        }
+        else if (step.op === 'fill') { fill(el, String(step.value)); lastFilled = el; lastTouch = performance.now(); }
         else if (step.op === 'select') {
           const res = pickOption(el, step.value);
           lastAct = performance.now();
@@ -1122,9 +1274,14 @@ export function foresightRuntime() {
           // (a gap made by spacing instead of a space character is still a gap: "Jordan" "+962" reads "Jordan +962")
           const tight = (z) => norm(z).replace(/ /g, ''), like = (o) => norm(textOf(o)) === want || sim(textOf(o), step.value) >= MATCH || tight(textOf(o)) === tight(step.value);
           const reads = (o) => like(o) && visible(o) && (like(lineOf(o)) || plusCode(o));
+          // Second best: the value is the first thing its line says, and the line goes on with more words (a place and
+          // its country, a name and an e-mail address). Good only if exactly one line starts like that.
+          const leads = (o) => { if (!like(o) || !visible(o)) return false; const line = lineOf(o); if (line === o) return false; const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (flat(n.textContent)) return o.contains(n); return false; };
+          const before2 = new Set(qsa('*').filter((o) => cheap(o) && leads(o)));
+          let led = null, rivals = [];
           const before = new Set(qsa('*').filter((o) => cheap(o) && reads(o)));
           const wasOpen = isOpener(el) ? el.getAttribute('aria-expanded') === 'true' : !!step.typed;
-          const opens = !((el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type)) || el.tagName === 'TEXTAREA' || el.isContentEditable);
+          const opens = !((el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type) && el.readOnly !== true) || el.tagName === 'TEXTAREA' || el.isContentEditable);
           const linked = () => ((el.getAttribute('aria-controls') || '') + ' ' + (el.getAttribute('aria-owns') || '')).split(/\s+/).filter(Boolean).map((id) => el.getRootNode().getElementById?.(id) || document.getElementById(id)).filter(Boolean);
           const fresh = new Set(); let dirty = true, lastHit = null, calls = 0, twins = 0;
           const mo = new MutationObserver((ms) => { dirty = true; for (const m of ms) { if (m.type === 'attributes') fresh.add(m.target); else for (const n of m.addedNodes) if (n.nodeType === 1) fresh.add(n); } });
@@ -1132,7 +1289,7 @@ export function foresightRuntime() {
           let did = !!step.typed;
           const text0 = bodyText();                         // what the page says before anything is typed
           const empty0 = !!step.typed || !flat(el.value ?? '');   // a field that already holds an answer is never overwritten on a guess
-          const typable = (el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type)) || el.tagName === 'TEXTAREA' || el.isContentEditable;
+          const typable = (el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type) && el.readOnly !== true) || el.tagName === 'TEXTAREA' || el.isContentEditable;
           if (typable && el.list && [...el.list.options].some((o) => sim(o.value || o.text, step.value) >= MATCH)) {      // a native list of suggestions: the value itself is the choice
             fill(el, [...el.list.options].find((o) => sim(o.value || o.text, step.value) >= MATCH).value); mo.disconnect(); watcher.disconnect(); keepHelpers();
             el.blur(); pending.set(el, { step: { ...step, op: 'fill' }, el, used: false }); lastTouch = performance.now(); stop('ok'); continue;
@@ -1153,8 +1310,14 @@ export function foresightRuntime() {
             if (!pool.length && wasOpen) pool = [...before].filter((o) => o.isConnected && floatRoot(o) && !within(el, floatRoot(o)) && reads(o));    // the list was already showing
             const deepest = pool.filter((o) => !pool.some((x) => x !== o && within(x, o)));
             const lines = new Set(deepest.map(lineOf));
-            if (lines.size > 1) { twins = lines.size; return (lastHit = deepest[0]); }      // several choices read exactly alike: not for the engine to choose
-            twins = 0;
+            if (lines.size > 1) { twins = lines.size; rivals = [...lines].map((l) => textOf(l).slice(0, 80)); return (lastHit = deepest[0]); }      // several choices read exactly alike: not for the engine to choose
+            twins = 0; led = null;
+            if (!deepest.length) {
+              const pool2 = [...cand].filter((o) => cheap(o) && (!before2.has(o) || lists.some((l) => within(o, l))) && leads(o));
+              const lines2 = new Set(pool2.map(lineOf));
+              if (lines2.size > 1) { twins = lines2.size; rivals = [...lines2].map((l) => textOf(l).slice(0, 80)); return (lastHit = pool2[0]); }
+              if (lines2.size === 1) { led = pool2.find((o) => !pool2.some((x) => x !== o && within(x, o))) || pool2[0]; return (lastHit = led); }
+            }
             return (lastHit = deepest[0] || null);
           };
           // First a short wait. If nothing shows, the engine checks whether the page asked its server for suggestions:
@@ -1172,14 +1335,20 @@ export function foresightRuntime() {
           mo.disconnect();
           const still = typable && !declares && bodyText() === text0;
           if (!opt) { watcher.disconnect(); keepHelpers(); stop('timeout', { why: isOpener(el) ? 'no choice with that text appeared' : `no suggestion matching the value appeared; the field now holds ${JSON.stringify(el.value ?? '')}`, acted: did, reacted: mutations > 0, quick, quiet: mutations === 0, still: still && empty0, plain: bare && still }); break; }
-          if (twins) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: `${twins} choices read exactly like that (perhaps under different headings): choose by css, or by a fuller text`, acted: did }); break; }
+          if (twins) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: `${twins} choices read like that (perhaps under different headings, or with a different second line): give the fuller text of the one you mean, or choose by css`, options: rivals.slice(0, 8), acted: did }); break; }
+          if (led === opt) rec.note = `no suggestion reads exactly "${String(step.value).slice(0, 40)}"; chose "${textOf(lineOf(opt)).slice(0, 60)}", the only one that starts with it`;
           if (isDisabled(opt) || opt.closest('[aria-disabled=true]')) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: 'that choice is switched off', acted: did }); break; }
           const already = new Set(qsa('*').filter((o) => cheap(o) && reads(o)));          // whatever reads like the value before the choice is made proves nothing afterwards
           const menu = floatRoot(opt) || opt.parentElement;
           // for the two weaker proofs below: every word of the chosen line, what was on the page, and what the control said about itself
           // (pages split text into pieces as they please: "+" and "1", "United States" and "+1". The line counts both as it reads and piece by piece.)
           const wordsIn = (root) => { const out = new Set(tokens(textOf(root))), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) for (const x of tokens(n.textContent)) out.add(x); return out; };
-          const lineWords = wordsIn(lineOf(opt)), existed = new WeakSet(qsa('*')), saidBefore = saidNames(el).some((n) => has(n, want));
+          // the whole row of the choice: its list item, or the part of the list that is its alone (a row laid out as
+          // boxes side by side has its main text and its second line in boxes of their own)
+          const rowOf = (o) => { const item = o.closest('[role=option],[role=menuitem],li,option'); if (item && within(item, menu)) return item;
+            let n = lineOf(o); for (let pa = up(n); pa && pa !== menu && within(pa, menu); pa = up(n)) { const kids = [...pa.children]; if (kids.length >= 2 && kids.every((k) => k.tagName === kids[0].tagName && String(k.className) === String(kids[0].className))) break; n = pa; }
+            return n; };
+          const lineWords = wordsIn(rowOf(opt)), existed = new WeakSet(qsa('*')), saidBefore = saidNames(el).some((n) => has(n, want));
           pickLists.set(el, menu); pickProof.delete(el);
           pointerClick(opt); lastAct = performance.now();
           const old = new WeakSet(already);
@@ -1197,9 +1366,12 @@ export function foresightRuntime() {
           // Proof of the choice: a chip that appears beside the field, or the field itself now showing the choice. When
           // the plan typed the whole value, the field showing it proves nothing yet, so the chip gets its chance first.
           const typedAll = !opens && norm(step.typeText ?? String(step.value).slice(0, 3)) === want;
+          const typedText = norm(step.typeText ?? String(step.value).slice(0, 3));
           await until(() => {
             const box = chipBox(); if (box) { pickProof.set(el, { box, old, menu }); return true; }
             if (!typedAll && verify(step, el)) return true;
+            // the field now holds the chosen line, or part of it ("Paris, France" for the suggestion "Paris" / "France"), not what was typed
+            if (closed() && flat(el.value ?? '') && norm(el.value) !== typedText) { const vw = tokens(el.value); if (vw.size && [...vw].every((t) => lineWords.has(t))) { pickProof.set(el, { line: lineWords }); if (norm(el.value) !== want) rec.note = (rec.note ? rec.note + '; ' : '') + `the field shows "${flat(el.value).slice(0, 60)}"`; return true; } }
             if (!saidBefore && el.isConnected && saidNames(el).some((n) => has(n, want))) { pickProof.set(el, { name: true }); return true; }
             const sf = shortForm(); if (sf) { pickProof.set(el, { ...sf, menu }); rec.note = `the field shows "${sf.part.slice(0, 40)}" for this choice`; return true; }
             return false;
@@ -1297,7 +1469,7 @@ export function foresightRuntime() {
     const choosable = (h) => h.matches(CLICKABLE + ',td,li') || !!h.querySelector(CLICKABLE + ',td,li,[role=option],[role=gridcell]');
     const hs = (helpers.get(prev) || []).filter((h) => h.isConnected && visible(h) && choosable(h));
     if (!hs.some((h) => within(lastBlocker, h) || within(h, lastBlocker))) return false;
-    return noteDialogs().every((d) => infoOf(d).helper || (!infoOf(d).caused && !holdsWork(d)));
+    return noteDialogs().every((d) => infoOf(d).helper || hs.some((h) => within(d, h) || within(h, d)) || (!infoOf(d).caused && !holdsWork(d)));
   }
 
   function fingerprint() {
@@ -1324,18 +1496,31 @@ export function foresightRuntime() {
   }
   const pinNote = (el) => { const b = pinnedBox(el); if (!b) return ''; const t = textOf(b.querySelector('h1,h2,h3,h4,b,strong,legend') || b).slice(0, 30); return `  [in a box pinned to the window${t ? ': ' + JSON.stringify(t) : ''}]`; };
   // One compact look at the page for the planner: every control with its human name and current state.
+  // A page that only wants to know whether you are human. No engine should try to get past it.
+  function humanCheck(nControls) {
+    const bodyText = pageText();
+    const n = nControls ?? qsa(CONTROL + ',button,[role=button],input[type=submit]').filter(visible).length;
+    const challengeFrame = qsa('iframe').some((f) => (/captcha|challenge|turnstile/i.test(f.src || '') || /captcha|challenge/i.test(f.title || '')) && visible(f) && !pinnedBox(f) && getComputedStyle(f).position !== 'fixed');
+    const challengeText = /(verify|confirm|prove|make sure) (that )?you(['’]re| are) (a |not a )?(human|robot|bot)|are you (a )?(human|robot)\??|not a robot|human verification|verifying you are human|security verification|checking (if the site connection is secure|your browser)|unusual traffic|automated (queries|requests|access)|complete the (following )?(captcha|challenge|puzzle)|client challenge|made by a human|select all (squares|images|the)|press (and|&) hold/i.test((document.title + ' ' + bodyText).slice(0, 4000));
+    return (challengeText && n <= 6) || (challengeFrame && n <= 2 && flat(bodyText).length < 600);
+  }
   function observe() {
     markShown();                                                   // the planner is being shown what is here now
-    const lines = [], seen = new Set();
+    const seen = new Set(), seenAt = new Map();
+    // each line remembers the control it is about, so that lines that read alike can be told apart by where they are
+    const lines = [], owner = []; let cur = null;
+    { const push = lines.push.bind(lines); lines.push = (...a) => { for (const x of a) { push(x); owner.push(cur); } return lines.length; }; }
     const q = (s) => JSON.stringify(String(s));
     for (const el of qsa(CONTROL)) {
       const t = (el.type || '').toLowerCase(), role = el.getAttribute('role') || '';
       if (!shown(el)) continue;
+      cur = el;
       const name = anyName(el) || '(no label)';
       const off = isDisabled(el) ? ' disabled' : '';
       if (t === 'radio' || role === 'radio') {
-        const g = groupName(el) || el.name || '(radio)'; if (seen.has(g)) continue; seen.add(g);
-        const group = [...qsa('input[type=radio],[role=radio]')].filter((r) => (groupName(r) || r.name || '(radio)') === g);
+        const g = groupName(el) || el.name || '(radio)', home = (r) => r.closest('fieldset,[role=radiogroup]') || r.form || document, at = home(el);
+        const done = seenAt.get(g) || seenAt.set(g, new Set()).get(g); if (done.has(at)) continue; done.add(at);
+        const group = [...qsa('input[type=radio],[role=radio]')].filter((r) => (groupName(r) || r.name || '(radio)') === g && home(r) === at);
         const on = group.find(isChecked);
         lines.push(`radio ${q(g)} options: ${group.map((r) => (anyName(r) || r.value) + (isDisabled(r) ? ' (disabled)' : '')).join(' | ')}${on ? `  (selected: ${anyName(on) || on.value})` : ''}`); continue;
       }
@@ -1345,6 +1530,10 @@ export function foresightRuntime() {
         lines.push(`select${el.multiple ? ' (multiple)' : ''} ${q(name)} options: ${[...el.options].map((o) => flat(o.text)).filter(Boolean).slice(0, 25).join(' | ')}${cur ? `  (selected: ${cur})` : ''}${off}`); continue;
       }
       if (/submit|button|file|image|reset/.test(t)) continue;
+      if (role === 'slider' || t === 'range') {
+        const at = (k, p) => (el.tagName === 'INPUT' ? el[p] : el.getAttribute('aria-value' + k)) ?? '';
+        lines.push(`slider ${q(name)} value=${at('now', 'value')}${at('min', 'min') !== '' && at('max', 'max') !== '' ? ` (from ${at('min', 'min')} to ${at('max', 'max')})` : ''}${el.getAttribute('aria-valuetext') ? ` shown as ${q(el.getAttribute('aria-valuetext'))}` : ''} (set it with "fill")${off}`); continue;
+      }
       if (isOpener(el)) { lines.push(`dropdown ${q(name)} (custom: use "pick")${textOf(el) ? `  (shows: ${textOf(el).slice(0, 40)})` : ''}${off}`); continue; }
       const auto = role === 'combobox' || el.getAttribute('aria-autocomplete') || el.getAttribute('list') ? ' (autocomplete)' : '';
       lines.push(`${el.tagName === 'TEXTAREA' ? 'textarea' : `input[${t || 'text'}]`} ${q(name)}${el.value ? ` value=${q(flat(el.value).slice(0, 80))}` : ''}${auto}${el.required ? ' required' : ''}${el.readOnly ? ' readonly' : ''}${off}${pinNote(el)}`);
@@ -1360,8 +1549,14 @@ export function foresightRuntime() {
       if (n) lines.push(`expandable ${q(n)} (${(el.tagName === 'DETAILS' ? el.open : el.getAttribute('aria-expanded') === 'true') ? 'expanded' : 'collapsed'})`);
     }
     const links = [];
+    cur = null;
+    // column headers that sort the table when pressed
+    { let k = 0; for (const el of qsa('th,[role=columnheader]')) { if (k >= 20) break; const tx = flat(el.textContent);      // (as written, not as a style sheet capitalises it)
+        if (!visible(el) || !tx || tx.length > 40 || el.querySelector(CLICKABLE + ',' + CONTROL) || !(el.hasAttribute('aria-sort') || getComputedStyle(el).cursor === 'pointer' || /sort/i.test(String(el.className)))) continue;
+        k++; lines.push(`column header ${q(tx)} (press to sort${el.getAttribute('aria-sort') && el.getAttribute('aria-sort') !== 'none' ? '; now ' + el.getAttribute('aria-sort') : ''})`); } }
     for (const el of qsa(CLICKABLE)) {
       if (!visible(el)) continue;
+      cur = el;
       let n = anyName(el); if (!n) continue;
       if (opensList(el)) { lines.push(`dropdown ${q(n.slice(0, 80))} (custom: use "pick")${isDisabled(el) ? ' disabled' : ''}`); continue; }      // a button that opens a list of choices
       if (n.length > 150) n = n.slice(0, 150).replace(/\s+\S*$/, '') + ' …';
@@ -1371,6 +1566,7 @@ export function foresightRuntime() {
       const buttonish = el.tagName !== 'A' || el.getAttribute('role') === 'button' || drawnAsButton(el);
       if (buttonish) lines.push(`button ${q(n)}${also}${isDisabled(el) ? ' disabled' : ''}${pinNote(el)}`); else links.push(n + (more ? `  (also: ${more.slice(0, 150)})` : ''));
     }
+    cur = null;
     for (const el of iconButtons(document)) { if (visible(el)) { const n = anyName(el).slice(0, 60); if (n) lines.push(`button ${q(n)}`); } }
     let loose = 0;
     for (const el of qsa('[tabindex]:not([tabindex="-1"])')) {
@@ -1389,16 +1585,22 @@ export function foresightRuntime() {
       lines.push(`hidden button ${anyName(el) ? q(anyName(el).slice(0, 40)) + ' ' : ''}css ${q(el.tagName.toLowerCase() + (cls ? '.' + cls : ''))} (not visible now; may appear on hover)`);
     }
     // collapse repeats ("Add to basket" x20) so the list stays readable
-    const count = new Map(); for (const l of lines) count.set(l, (count.get(l) || 0) + 1);
+    // fields and tick boxes of one name: say where each one is, when the page gives them places of their own
+    const sameName = new Map(), told = lines.slice();
+    lines.forEach((l, k) => { const key = owner[k] && (l.match(/^(?:input\[[a-z-]*\]|textarea|select(?: \(multiple\))?|checkbox|dropdown|slider|radio) "(?:[^"\\]|\\.)*"/) || [])[0]; if (key) (sameName.get(key) || sameName.set(key, []).get(key)).push(k); });
+    for (const ks of sameName.values()) {
+      if (ks.length < 2 || ks.length > 12) continue;
+      const ws = ks.map((k) => rowWord(owner[k]) || placeWord(owner[k]));
+      if (ws.every(Boolean) && new Set(ws).size > 1) ks.forEach((k, j) => { told[k] = `${told[k]}  ${ws[j]}`; });
+    }
+    const count = new Map(); for (const l of told) count.set(l, (count.get(l) || 0) + 1);
     const controls = [...count].map(([l, c]) => (c > 1 ? `${l}  x${c}` : l));
     const frames = [...qsa('iframe')].filter((f) => { const r = f.getBoundingClientRect(); return visible(f) && r.width > 80 && r.height > 40; }).length;
     const dlg = topDialog();
     // a page that only wants to know whether you are human: no engine should try to get past it
     // (a small "protected by ..." badge pinned to a corner of an ordinary page is not a check)
     const bodyText = pageText();
-    const challengeFrame = qsa('iframe').some((f) => (/captcha|challenge|turnstile/i.test(f.src || '') || /captcha|challenge/i.test(f.title || '')) && visible(f) && !pinnedBox(f) && getComputedStyle(f).position !== 'fixed');
-    const challengeText = /verify (that )?you are (a )?human|are you a robot|not a robot|security verification|checking your browser|unusual traffic|complete the (captcha|challenge)|client challenge/i.test((document.title + ' ' + bodyText).slice(0, 4000));
-    const botCheck = (challengeText && controls.length <= 6) || (challengeFrame && controls.length <= 2 && flat(bodyText).length < 600);
+    const botCheck = humanCheck(controls.length);
     return { url: location.href, title: flat(document.title), frames, botCheck, dialog: dlg ? textOf(dlg).slice(0, 120) : null, dialogButtons: dlg ? dialogBrief(dlg).buttons : [],
       headings: [...qsa('h1,h2,h3,h4,h5,legend')].filter(visible).map(textOf).filter(Boolean).slice(0, 12), controls, links: [...new Set(links)] };
   }
@@ -1567,9 +1769,15 @@ export function foresightRuntime() {
   const fileNames = (css) => { const el = qsa(css)[0]; return el && el.files ? [...el.files].map((f) => f.name) : null; };
   // Text of what a target points at, for plans that need to read something back.
   function read(target) {
+    const all = readAll(target), n = target && typeof target === 'object' ? target.nth : null;
+    if (!Number.isInteger(n) || n === 0) return all.slice(0, 30);
+    const one = n > 0 ? all[n - 1] : all[all.length + n];
+    return one === undefined ? [] : [one];
+  }
+  function readAll(target) {
     if (typeof target === 'string') return find(target);
     if (target.row != null) return readCell(target.row, target.col);
-    try { if (target.css) return qsa(target.css).filter(visible).slice(0, 30).map((e) => (e.value !== undefined && e.value !== '' && /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) ? flat(e.value) : textOf(e))).map((x) => (x.length > 1500 ? x.slice(0, 1500) + ' …(cut)' : x)); } catch { return ['(the css selector is not valid)']; }
+    try { if (target.css) return qsa(target.css).filter(visible).slice(0, 200).map((e) => (e.value !== undefined && e.value !== '' && /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) ? flat(e.value) : textOf(e))).map((x) => (x.length > 1500 ? x.slice(0, 1500) + ' …(cut)' : x)); } catch { return ['(the css selector is not valid)']; }
     return find(target.text ?? target.label ?? '');
   }
   function scrollPage(dir) {
@@ -1608,11 +1816,21 @@ export function foresightRuntime() {
     await quiet(60, Math.max(60, Math.min(500, end - performance.now())));
     return true;
   }
-  const focusInfo = () => { const a = deepActive(); return { editable: !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) && a.readOnly !== true && !isDisabled(a), tag: a?.tagName?.toLowerCase() || null, name: a && a !== document.body ? anyName(a).slice(0, 60) : '' }; };
+  const focusInfo = () => { const a = deepActive(); return { editable: !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || !!a.editContext || (/^(textbox|searchbox|combobox)$/.test(a.getAttribute?.('role') || '') && a !== document.body)) && a.readOnly !== true && !isDisabled(a), tag: a?.tagName?.toLowerCase() || null, name: a && a !== document.body ? anyName(a).slice(0, 60) : '' }; };
 
   window.__FS = {
-    version: 13, dialogs: () => noteDialogs().map((d) => ({ tag: d.tagName.toLowerCase(), id: d.id || undefined, modal: isModal(d), ...infoOf(d), holdsWork: holdsWork(d) })), seen: () => { markShown(); return true; }, track, unit: { sim, has: (h, n) => has(norm(h), norm(n)), looseEq }, begin, acted, helperBlocks, pressing: () => { lastAct = performance.now(); keyFocus = deepActive(); return true; }, carry: (pressed) => { if (pressed) pressedBefore = true; return true; }, keysSafe, armAt, leaving: () => performance.now() - leavingAt < 4000, finishClick, disarm: () => { const g = disarm(); if (g) g.watcher.disconnect(); return true; }, frameText, locateFile, fileNames, markUpload, uploadProof, bodyText, read, scrollPage, boxOf, pageText, drifted, consume: acted, observe, tables, find, locate, quiet, ready, focusInfo, runWindow, audit, dismissInterrupt, fingerprint,
+    version: 14, dialogs: () => noteDialogs().map((d) => ({ tag: d.tagName.toLowerCase(), id: d.id || undefined, modal: isModal(d), ...infoOf(d), holdsWork: holdsWork(d) })), seen: () => { markShown(); return true; }, track, unit: { sim, has: (h, n) => has(norm(h), norm(n)), looseEq }, begin, acted, helperBlocks, pressing: () => { lastAct = performance.now(); keyFocus = deepActive(); return true; }, carry: (pressed) => { if (pressed) pressedBefore = true; return true; }, keysSafe, armAt, leaving: () => performance.now() - leavingAt < 4000, finishClick, disarm: () => { const g = disarm(); if (g) g.watcher.disconnect(); return true; }, frameText, locateFile, fileNames, markUpload, uploadProof, bodyText, read, scrollPage, boxOf, pageText, drifted, consume: acted, observe, tables, find, locate, quiet, ready, focusInfo, runWindow, audit, dismissInterrupt, fingerprint,
     check: (step) => { const r = resolve(step); return !!r.el && verify(step, r.el); },
+    humanCheck: () => humanCheck(),
+    // (a layer that no longer takes presses is on its way out: give it a moment more to leave altogether, since a
+    // widget may ignore a new press while its old list is still closing)
+    blockerGone: (ms) => {
+      const b = lastBlocker;
+      return until(() => { if (!b || !b.isConnected || !b.getClientRects().length) return true; const cs = getComputedStyle(b); return cs.display === 'none' || cs.visibility === 'hidden'; }, ms);
+    },
+    focusInHelper: (css) => { let prev = null; try { prev = qsa(css)[0]; } catch {} const a = deepActive(); return !!prev && !!a && (helpers.get(prev) || []).some((h) => h.isConnected && within(a, h)); },
+    sliderNow: (css) => { const el = qsa(css)[0]; return el ? sliderAt(el) : NaN; },
+    emptyNow: (css) => { const el = qsa(css)[0]; return !el || !/[\p{L}\p{N}]/u.test(el.isContentEditable ? el.innerText : el.value ?? el.innerText ?? ''); },
     expect: (e) => until(() => expectMet(e), e.timeout || 5000).then(Boolean),
     expectNow: (e) => expectMet(e),
     // Wait for a step's control to become choosable. `settle`: something similar is already on the page, so the wait

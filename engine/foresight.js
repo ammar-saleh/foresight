@@ -24,7 +24,8 @@ const PRESSES = ['click', 'keys', 'dblclick', 'rightclick', 'clickAt', 'pick'];
 const PAGE_OPS = ['fill', 'select', 'check', 'uncheck', 'radio', 'pick', 'click', 'expand'];   // run inside the page, in windows
 const NODE_OPS = ['keys', 'type', 'hover', 'dblclick', 'rightclick', 'goto', 'upload', 'drag', 'scroll', 'clickAt', 'read', 'expect'];
 const MOUSE_OPS = ['click', 'hover', 'dblclick', 'rightclick', 'drag'];   // a bare string names visible text                                 // real input / navigation, one at a time
-const STEP_KEYS = ['value', 'typeText', 'expect', 'risk', 'frame', 'dialog', 'timeout', 'waitMs', 'to', 'file', 'real', 'scripted'];
+const STEP_KEYS = ['value', 'typeText', 'expect', 'risk', 'frame', 'dialog', 'timeout', 'waitMs', 'to', 'file', 'real', 'scripted', 'times', 'hold'];
+const HOLD_KEYS = ['Control', 'Shift', 'Alt', 'Meta', 'ControlOrMeta'];
 const EXPECT_KEYS = ['text', 'title', 'url', 'selector', 'gone', 'label', 'timeout', 'op'];
 const TARGET_KEYS = ['label', 'text', 'css', 'near', 'nth', 'row', 'col'];
 const GONE = /context was destroyed|navigat|target closed|frame was detached|cannot find context/i;
@@ -96,7 +97,11 @@ export class Foresight {
       if (s.file != null && op !== 'upload') bad('"file" only belongs to an "upload" step');
       if (unknown.length) bad(`unknown field ${unknown.map((u) => `"${u}"`).join(', ')}${unknown.some((u) => TARGET_KEYS.includes(u)) ? ` ("near" / "nth" / "css" belong inside the target: {"${op}": {"label": "...", "near": "..."}})` : ''}`);
       if (s.risk != null && s.risk !== 'irreversible' && s.risk !== 'normal') bad(`"risk" must be "irreversible" (got ${JSON.stringify(s.risk)})`);
-      if (s.dialog != null && s.dialog !== 'accept' && s.dialog !== 'dismiss') bad(`"dialog" must be "accept" or "dismiss" (got ${JSON.stringify(s.dialog)})`);
+      const answers = s.dialog && typeof s.dialog === 'object' && !Array.isArray(s.dialog) && typeof s.dialog.answer === 'string' && Object.keys(s.dialog).length === 1;
+      if (s.dialog != null && s.dialog !== 'accept' && s.dialog !== 'dismiss' && !answers) bad(`"dialog" must be "accept", "dismiss" or {"answer": "text for the box that asks for it"} (got ${JSON.stringify(s.dialog)})`);
+      if (s.times != null && (op !== 'keys' || !Number.isInteger(s.times) || s.times < 1 || s.times > 200)) bad('"times" repeats a "keys" step: a whole number from 1 to 200');
+      if (s.hold != null && (op !== 'click' || !HOLD_KEYS.includes(s.hold))) bad('"hold" belongs to a "click" step and names the key held down during it: "Control", "Shift", "Alt" or "Meta"');
+      if (s.hold != null && (s.scripted === true || s.real === false || this.clicks === 'scripted')) bad('"hold" needs a real click, not a scripted one');
       if (s.expect != null) {
         if (typeof s.expect !== 'object' || Array.isArray(s.expect)) bad('"expect" must be an object like {"text": "Saved"}');
         const ek = Object.keys(s.expect), unk = ek.filter((k) => !EXPECT_KEYS.includes(k));
@@ -106,7 +111,9 @@ export class Foresight {
       if (s.real != null && (op !== 'click' || typeof s.real !== 'boolean')) bad('"real" only applies to a "click" step');
       if (s.scripted != null && (op !== 'click' || typeof s.scripted !== 'boolean')) bad('"scripted" only applies to a "click" step');
       // clicks are real mouse presses unless the plan asks for a scripted one ("scripted": true, or the older "real": false)
-      const base = { i, op, expect: s.expect, risk: s.risk || 'normal', frame: s.frame, dialog: s.dialog, scripted: op === 'click' && (s.scripted === true || s.real === false || this.clicks === 'scripted') };
+      // a "timeout" written beside "expect" instead of inside it is meant for it
+      const expect = s.expect && s.timeout != null && s.expect.timeout == null && Number.isFinite(s.timeout) ? { ...s.expect, timeout: s.timeout } : s.expect;
+      const base = { i, op, expect, risk: s.risk || 'normal', frame: s.frame, dialog: s.dialog, times: s.times, hold: s.hold, scripted: op === 'click' && (s.scripted === true || s.real === false || this.clicks === 'scripted') };
       if (op === 'expect') return { ...base, target: {} };
       if (op === 'keys' || op === 'type' || op === 'goto') {
         if (typeof s[op] !== 'string' || !s[op]) bad(`"${op}" needs a text value`);
@@ -174,6 +181,7 @@ export class Foresight {
     this._fail = null; this._pressed = false;
     let page = this.page;
     const stats = { roundTrips: 0, windows: [], repairs: [], warnings: [], notes: [], reads: [], modelCalls: 0, checkpoints: 0, cacheHits: 0, heals: 0, navigations: 0 };
+    if (this.page) this.page.__fsChooser = null;
     let steps;
     try { steps = this._steps = this.normalize(plan); } catch (e) { return this.finish(plan, t0, stats, false, e.message); }
     if (plan.popups != null && !(Array.isArray(plan.popups) && plan.popups.every((x) => typeof x === 'string' && x))) return this.finish(plan, t0, stats, false, '"popups" must be a list of button names you allow to be pressed in a pop-up that is in the way, e.g. ["Reject all", "No thanks"]');
@@ -316,7 +324,7 @@ export class Foresight {
         let fin;
         try {
           stats.roundTrips += 4;
-          const pr = await this.press(target, armed.x, armed.y);
+          const pr = await this.press(target, armed.x, armed.y, steps[armed.i].hold);
           if (pr.covered) {                                            // the page around the frame has something over that point: nothing was pressed
             await target.evaluate(() => window.__FS.disarm()).catch(() => {});
             fin = { status: 'blocked', why: 'something on the page around the frame covers this control', blocker: pr.covered, acted: false };
@@ -356,6 +364,7 @@ export class Foresight {
       for (const r of recs) {
         const m = (memo.steps[r.i] ||= { a: 0, b: 0 });
         if (r.warn) stats.warnings.push(`step ${r.i}: ${r.warn}`);
+        if (r.opened) stats.notes.push(`step ${r.i}: the press opened something over the control ("${r.opened}"), which took the release`);
         if (r.note && !stats.notes.includes(`step ${r.i}: ${r.note}`)) stats.notes.push(`step ${r.i}: ${r.note}`);      // (a step that was tried again says it once)
         if (r.css) cssOf[r.i] = r.css;
         if (r.status === 'ok') {
@@ -373,8 +382,8 @@ export class Foresight {
       // A step that starts loading another page: wait for it to land and for its scripts to wire up before acting again.
       if (lastOk && (res.trip?.kind === 'navigation' || lastOk.mayNavigate || page.__fsNav > nav0)) {
         if (page.__fsNav === nav0 && res.trip?.kind === 'navigation') {      // the old page is on its way out: wait for the new one to land
-          const end = Date.now() + 10000;
-          while (page.__fsNav === nav0 && Date.now() < end) await new Promise((r) => setTimeout(r, 25));
+          const end = Date.now() + 10000, dl0 = page.__fsDl;
+          while (page.__fsNav === nav0 && page.__fsDl === dl0 && Date.now() < end) await new Promise((r) => setTimeout(r, 25));
         }
         if (page.__fsNav > nav0) { stats.navigations++; await this.pageReady(); }
       }
@@ -389,6 +398,20 @@ export class Foresight {
       const tries = by[failed.status];
       this.log(`step ${failed.i} ${failed.op}: ${failed.status}`);
 
+      // Covered or not shown at this instant: a tip that is still fading out, a menu still sliding open. Give the
+      // page a moment to finish before anything else is tried.
+      if ((failed.status === 'hidden' || (failed.status === 'blocked' && failed.acted !== 'unknown')) && !s.settled) {
+        s.settled = true;
+        let free = false;
+        for (const end = Date.now() + (failed.dialog ? 600 : 900); !free && Date.now() < end;) {
+          await page.waitForTimeout(100);
+          const l = await target.evaluate(([st]) => window.__FS.locate(st), [this.prep(s, memo)]).catch(() => null);
+          free = !!l && l.found && l.reach && !l.hidden;
+        }
+        stats.roundTrips += 2;
+        if (free) { stats.repairs.push({ at: failed.i, kind: 'waited', for: failed.status }); by[failed.status]--; continue; }
+      }
+
       if (failed.status === 'blocked' || failed.status === 'interrupt') {
         let d = { clicked: null };
         // Only ever in the document the step lives in, and only what the runtime itself saw covering the control.
@@ -401,8 +424,10 @@ export class Foresight {
           if (safe) {
             try {
               stats.roundTrips += 3;
-              await target.locator(cssOf[prev.i]).first().focus({ timeout: 1500 });
+              // (a list that has taken the keyboard for itself hears Escape where it is)
+              if (!(await target.evaluate((c) => window.__FS.focusInHelper(c), cssOf[prev.i]).catch(() => false))) await target.locator(cssOf[prev.i]).first().focus({ timeout: 1500 });
               await page.keyboard.press('Escape');
+              await target.evaluate(() => window.__FS.blockerGone(900)).catch(() => {});      // a list that closes with a short animation
               const kept = await target.evaluate(([st]) => window.__FS.check(st), [this.prep(prev, memo)]).catch(() => false);
               if (!kept) return fail({ i: failed.i, op: failed.op, status: 'verify-failed', why: `Escape was pressed to close the helper left open by step ${prev.i}, and that field no longer holds its value. Look at the page`, acted: true }, `a field changed at step ${failed.i}`);
               d = { clicked: 'Escape (closed a helper left open by the previous field)' };
@@ -422,13 +447,33 @@ export class Foresight {
         stats.repairs.push({ at: failed.i, kind: 'real-typing' });
         stats.roundTrips += 4;
         try {
-          await target.locator(failed.css).first().click({ timeout: 3000 });
-          await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.press('Delete');
-          await page.keyboard.type(String(s.value));
+          if (failed.slider) {                                 // a slider that only listens to real arrow keys
+            await target.locator(failed.css).first().focus({ timeout: 1500 });
+            const now = () => target.evaluate((c) => window.__FS.sliderNow(c), failed.css), want = Number(s.value);
+            let v = await now(), right = 1;                     // which way the right arrow moves it is found out on the first press
+            for (let k = 0; k < 300 && Number.isFinite(v) && v !== want; k++) {
+              const up = want > v, key = up === right > 0 ? 'ArrowRight' : 'ArrowLeft';
+              await page.keyboard.press(key);
+              const w = await now();
+              if (w === v) break;
+              if (k === 0 && (w > v) !== up) right = -right;
+              else if ((up && w > want) || (!up && w < want)) { failed.why = `the slider moves in steps: ${v} and ${w} are the nearest values it can show`; break; }
+              v = w;
+            }
+          } else {
+            if (failed.surface) await target.locator(failed.css).first().focus({ timeout: 1500 });      // the editor draws its text over the surface that takes the keys
+            else await target.locator(failed.css).first().click({ timeout: 3000 }).catch(() => target.locator(failed.css).first().focus({ timeout: 1500 }));
+            // select everything and delete it; an editor with blocks of its own may need that more than once
+            for (let k = 0; k < 3; k++) {
+              await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.press('Delete');
+              if (await target.evaluate((c) => window.__FS.emptyNow(c), failed.css).catch(() => true)) break;
+            }
+            await page.keyboard.type(String(s.value));
+          }
         } catch {}
         const good = await rt(([st]) => window.__FS.check(st), [this.prep(s, memo)]).catch(() => false);
         if (good) { await target.evaluate(([st]) => window.__FS.track(st), [this.prep(s, memo)]).catch(() => {}); done.add(failed.i); i = failed.i + 1; continue; }
-        failed = { ...failed, status: 'verify-failed', why: 'the editor did not keep the typed text', acted: true }; this._fail = failed;
+        failed = { ...failed, status: 'verify-failed', why: failed.slider ? (/steps/.test(failed.why || '') ? failed.why : 'the slider did not take that value') : 'the editor does not show exactly the text that was typed (it may have kept older text, or changed what was typed): read it to see what it holds', acted: true }; this._fail = failed;
       }
       if (failed.status === 'hidden') {
         // careful mode: move the real mouse over the row/card that owns the control, then try again
@@ -468,7 +513,7 @@ export class Foresight {
         const good = await rt(([st]) => window.__FS.check(st), [this.prep(s, memo)]).catch(() => false);
         if (good) { await target.evaluate(([st]) => window.__FS.track(st), [this.prep(s, memo)]).catch(() => {}); done.add(failed.i); i = failed.i + 1; continue; }
       }
-      if (failed.status === 'verify-failed' && failed.css && tries === 1 && (s.op === 'fill' || s.op === 'select') && failed.acted !== false && s.risk !== 'irreversible') {
+      if (failed.status === 'verify-failed' && failed.css && tries === 1 && (s.op === 'fill' || s.op === 'select') && failed.acted !== false && !failed.slider && s.risk !== 'irreversible') {
         // careful mode: real keystrokes, then leave the field like a person would, then re-read it
         stats.repairs.push({ at: failed.i, kind: 'trusted-input' });
         stats.roundTrips += 4;
@@ -493,7 +538,7 @@ export class Foresight {
           } else if (s.op === 'pick' && failed.quick && page.__fsReq > req0) {
             // the page asked its server for suggestions: they are just slow. Keep waiting, do not type again.
             stats.repairs.push({ at: failed.i, kind: 'wait-for-suggestions' });
-            s.typed = true; by.timeout = 0; continue;
+            s.typed = true; s.pin = failed.css; by.timeout = 0; continue;
           } else if (s.op === 'pick' && failed.quick) {
             stats.repairs.push({ at: failed.i, kind: 'careful-retry' });
             stats.roundTrips += 3;
@@ -502,7 +547,7 @@ export class Foresight {
             await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.type(s.typeText ?? String(s.value).slice(0, 3));
             await page.waitForTimeout(150);
             // Did typing change anything? Scripted typing left the page's words as they were (`still`); did real keys, and did the page ask its server for anything?
-            s.typed = true; s.inert = !!failed.still && said != null && page.__fsReq === reqT && (await target.evaluate(() => window.__FS.bodyText()).catch(() => '')) === said;
+            s.typed = true; s.pin = failed.css; s.inert = !!failed.still && said != null && page.__fsReq === reqT && (await target.evaluate(() => window.__FS.bodyText()).catch(() => '')) === said;
             continue;                                       // the runtime now waits for the suggestion and picks it
           }
         } catch {}
@@ -520,6 +565,15 @@ export class Foresight {
     }
     if (this._popup) { await new Promise((r) => setTimeout(r, 50)); await adoptTab(null, null); }
     if (this.useCache) this.saveCache();
+    // Every step ran. Is what the plan ticked and chose still there? (a list that un-ticks the other rows when one is
+    // ticked says nothing at the time: only looking again at the end shows it)
+    { const left = (await this.auditAll(steps, done, steps.length, memo, stats).catch(() => [])).filter((d) => ['check', 'uncheck', 'radio', 'select'].includes(steps[d.i]?.op));
+      if (left.length) {
+        const at = [...new Set(left.map((d) => d.i))];
+        return fail({ i: at[0], op: steps[at[0]].op, status: 'verify-failed', why: `every step ran, but at the end what step ${at.join(', ')} set is no longer set: a later step (or the page itself) changed it back. Look at the page`, fields: left, acted: true }, `what step ${at.join(', ')} set did not last`);
+      } }
+    if (await page.evaluate(() => window.__FS.humanCheck()).catch(() => false)) stats.warnings.unshift('the page now showing asks you to prove you are human. Foresight does not get past such checks and must not try: the steps did not reach the page they were written for, so tell the user');
+    if (this._dlNames?.length) { stats.notes.push(`the page handed over ${this._dlNames.length === 1 ? 'a file' : this._dlNames.length + ' files'}: ${this._dlNames.map((n) => JSON.stringify(n)).join(', ')}`); }
     return this.finish(plan, t0, stats, true);
   }
 
@@ -530,11 +584,16 @@ export class Foresight {
     page.__fsArmed = true;
     page.__fsNav = 0;
     page.on('dialog', async (d) => {
-      const policy = this._dialogPolicy || (d.type() === 'alert' || d.type() === 'beforeunload' ? 'accept' : 'dismiss');
-      (this._dialogs ||= []).push({ type: d.type(), message: d.message().slice(0, 200), action: policy });
-      try { if (policy === 'accept') await d.accept(); else await d.dismiss(); } catch {}
+      const given = this._dialogPolicy, answer = given && typeof given === 'object' ? given.answer : null;
+      const policy = answer != null ? 'accept' : given || (d.type() === 'alert' || d.type() === 'beforeunload' ? 'accept' : 'dismiss');
+      const typed = answer != null && d.type() === 'prompt';
+      (this._dialogs ||= []).push({ type: d.type(), message: d.message().slice(0, 200), action: typed ? `answered ${JSON.stringify(answer)}` : policy });
+      try { if (typed) await d.accept(answer); else if (policy === 'accept') await d.accept(); else await d.dismiss(); } catch {}
     });
     page.on('framenavigated', (f) => { if (f === page.mainFrame()) page.__fsNav++; });
+    page.__fsDl = 0;
+    page.on('download', (d) => { page.__fsDl++; try { (this._dlNames ||= []).push(d.suggestedFilename()); } catch {} });      // a click that hands over a file loads no new page
+    page.on('filechooser', (fc) => { page.__fsChooser = fc; });      // (listening also keeps the system's own file window from opening)
     page.__fsReq = 0;
     page.__fsBusy = new Set();                                 // data requests still on their way
     const over = (r) => page.__fsBusy.delete(r);
@@ -558,7 +617,7 @@ export class Foresight {
   // A real mouse press at a point given inside `target` (the page or one of its frames). For a frame, the point is
   // walked out through every enclosing document, and at each level that document must really show the frame at that
   // point: if the page around the frame has anything over it, nothing is pressed.
-  async press(target, x, y) {
+  async press(target, x, y, hold) {
     const page = this.page;
     for (let fr = target === page ? null : target; fr && fr.parentFrame(); fr = fr.parentFrame()) {
       const el = await fr.frameElement();
@@ -574,7 +633,9 @@ export class Foresight {
       if (!at.ok) return { covered: at.over };
       x = at.x; y = at.y;
     }
-    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.up();
+    await page.mouse.move(x, y);
+    if (hold) await page.keyboard.down(hold);
+    try { await page.mouse.down(); await page.mouse.up(); } finally { if (hold) await page.keyboard.up(hold).catch(() => {}); }
     return {};
   }
 
@@ -602,7 +663,11 @@ export class Foresight {
         }
         acted = true;
         await target.evaluate(() => window.__FS.pressing()).catch(() => {});     // what opens now is the answer to this key
-        await page.keyboard.press(String(step.value)); await this.settle(nav0);
+        for (let k = 0, n = step.times || 1; k < n; k++) {
+          await page.keyboard.press(String(step.value));
+          if (n > 1) { await page.waitForTimeout(25); if (page.__fsNav !== nav0) { if (k < n - 1) stats.warnings.push(`step ${step.i}: the page changed after ${k + 1} of ${n} presses, so the rest were not sent`); break; } }
+        }
+        await this.settle(nav0);
         await target.evaluate(() => window.__FS.acted('keys')).catch(() => {});  // the key press may have used up what was typed in the focused field (a to-do box empties itself)
         if (page.__fsNav === nav0) {
           const d = await target.evaluate(() => window.__FS.drifted()).catch(() => []);
@@ -611,8 +676,15 @@ export class Foresight {
         }
       }
       else if (step.op === 'type') {
-        const f = await target.evaluate(() => window.__FS.focusInfo()).catch(() => ({ editable: true }));
-        if (!f.editable) return { ...rec, status: 'nofocus', why: 'nothing editable has focus, so the text would go nowhere (click or fill the field first)', acted: false };
+        let f = await target.evaluate(() => window.__FS.focusInfo()).catch(() => ({ editable: true }));
+        if (!f.editable && f.tag === 'iframe') {              // the focus is inside a frame: real keys go there by themselves
+          for (const fr of page.frames()) {
+            if (fr === target) continue;
+            const g = await fr.evaluate(() => (document.hasFocus() && window.__FS ? window.__FS.focusInfo() : null)).catch(() => null);
+            if (g && g.editable) { f = g; break; }
+          }
+        }
+        if (!f.editable) return { ...rec, status: 'nofocus', why: `nothing editable has focus, so the text would go nowhere (click or fill the field first${f.tag === 'iframe' ? '; the focus is inside a frame, so check that the click went to the field you mean' : ''})`, acted: false };
         if (/[\n\r]/.test(String(step.value))) {              // a line break can send a form just as Enter does
           const d = await target.evaluate(() => window.__FS.drifted()).catch(() => []);
           if (d.length) return { ...rec, status: 'verify-failed', why: 'a field no longer holds the value that was entered (the page changed it); nothing was typed', fields: d, acted: false };
@@ -630,17 +702,34 @@ export class Foresight {
           await target.evaluate(() => window.__FS.acted('keys')).catch(() => {});
         }
       }
-      else if (step.op === 'goto') { acted = true; await page.goto(String(step.value), { waitUntil: 'domcontentloaded', timeout: 45000 }); await this.pageReady(); }
+      else if (step.op === 'goto') {
+        acted = true;
+        const where = String(step.value).trim().toLowerCase(), o = { waitUntil: 'domcontentloaded', timeout: 45000 };
+        if (where === 'back' || where === 'forward') {
+          const res = await (where === 'back' ? page.goBack(o) : page.goForward(o));
+          if (res === null && page.__fsNav === nav0) {         // (a move inside a one-page app loads nothing, but the address changes)
+            const moved = await page.evaluate(() => new Promise((r) => { const u = location.href; setTimeout(() => r(location.href !== u), 250); })).catch(() => true);
+            if (!moved && where === 'back' && !(await page.evaluate(() => history.length > 1).catch(() => true))) return { ...rec, status: 'notfound', why: 'there is no earlier page to go back to in this tab', acted: false };
+          }
+        } else if (where === 'reload') await page.reload(o);
+        else await page.goto(String(step.value), o);
+        await this.pageReady();
+        // like "open": give the new page a moment to fetch what it shows and wire up its controls
+        await page.waitForLoadState('networkidle', { timeout: 2500 }).catch(() => {});
+        await page.waitForTimeout(150);
+      }
       else if (step.op === 'expect') { /* nothing to do: the expectation below is the whole step */ }
       else if (step.op === 'read') {
         // read what the page shows once it has settled: data it has asked its server for has arrived, and it has stopped redrawing
         await page.waitForTimeout(40);
         for (const end = Date.now() + 4000; page.__fsBusy?.size && Date.now() < end;) await page.waitForTimeout(40);
         await target.evaluate(() => window.__FS.quiet(150, 900)).catch(() => {});
+        await this.ensureRuntime(target).catch(() => this.pageReady());
         let found = await target.evaluate((t) => window.__FS.read(t), step.value);
         for (const end = Date.now() + 1500; !found.length && Date.now() < end;) { await page.waitForTimeout(150); found = await target.evaluate((t) => window.__FS.read(t), step.value).catch(() => []); }
         stats.reads.push({ step: step.i, read: step.value, found });
         if (!found.length) stats.warnings.push(`step ${step.i}: nothing on the page matches what was to be read`);
+        else if (found.every((x) => x === '')) stats.warnings.push(`step ${step.i}: what was read is empty (the field or element is there, with nothing in it)`);
         else if (step.value && step.value.row != null && found.length > 1) stats.warnings.push(`step ${step.i}: ${found.length} cells match that row and column (more than one table or row has them)`);
       }
       else if (step.op === 'scroll') {
@@ -684,6 +773,33 @@ export class Foresight {
         const missing = step.file.filter((f) => !fs.existsSync(f));
         if (missing.length) return { ...rec, status: 'nofile', why: `file not found: ${missing.join(', ')}` };
         const loc = await target.evaluate(([st]) => window.__FS.locateFile(st), [step]);
+        if (!loc.found || loc.p < need) {
+          // Some pages have no file field until a button is pressed, or hide an unnamed one behind a named button. If
+          // exactly one button or link carries the name the plan gave, it gets one real, guarded press, and the file
+          // goes to the file chooser that press opens. No chooser: the run stops and says the button was pressed.
+          const named = step.target.label ?? step.target.text;
+          const cs = this.prep({ ...step, op: 'click', expect: undefined, risk: undefined }, memo);
+          const btn = named != null ? await target.evaluate(([st]) => window.__FS.locate(st), [cs]).catch(() => null) : null;
+          if (btn && btn.found && btn.p >= need && btn.reach && !btn.hidden && !btn.disabled) {
+            const a = await target.evaluate(([st]) => window.__FS.armAt(st), [cs]);
+            if (a.x != null) {
+              page.__fsChooser = null;
+              const pr = await this.press(target, a.x, a.y);
+              if (pr.covered) { await target.evaluate(() => window.__FS.disarm()).catch(() => {}); return { ...rec, status: 'blocked', why: 'something covers the button that opens the file chooser', blocker: pr.covered, acted: false }; }
+              await target.evaluate(([st]) => window.__FS.finishClick(st), [cs]).catch(() => {});
+              for (const end = Date.now() + 2500; !page.__fsChooser && Date.now() < end;) await page.waitForTimeout(50);
+              const fc = page.__fsChooser; page.__fsChooser = null;
+              if (!fc) return { ...rec, status: 'timeout', why: `there is no upload field named "${named}", so the button of that name was pressed, but no file chooser opened. If the page opened its own upload box, look and go on from there`, acted: true };
+              if (step.file.length > 1 && !fc.isMultiple()) { await fc.setFiles([]).catch(() => {}); return { ...rec, status: 'error', why: 'this upload accepts one file only', acted: true }; }
+              await fc.setFiles(step.file, { timeout: 5000 });
+              const held = await fc.element().evaluate((e) => [...(e.files || [])].map((f) => f.name)).catch(() => null);
+              stats.notes.push(`step ${step.i}: attached through the file chooser that "${named}" opened`);
+              if (!held || !step.file.every((f) => held.includes(path.basename(f)))) stats.warnings.push(`step ${step.i}: the file was handed to the chooser, but the page's field no longer holds it: check that the page shows the file`);
+              acted = true; loc.viaChooser = true;
+            }
+          }
+        }
+        if (!loc.viaChooser) {
         if (!loc.found) return { ...rec, status: 'notfound', why: loc.why || (loc.count === 0 ? 'this page has no file-upload field' : 'no upload field matches that name'), closest: loc.closest };
         if (loc.p < need) return { ...rec, status: 'lowconf', p: +loc.p.toFixed(3), why: loc.why, closest: loc.closest };
         if (step.file.length > 1 && !loc.multiple) return { ...rec, status: 'error', why: 'this upload field accepts one file only', acted: false };
@@ -701,6 +817,7 @@ export class Foresight {
         }
         if (!proof.ok) return { ...rec, status: 'verify-failed', why: proof.gone ? 'the upload field is gone and the page does not show the file\'s name: look at the page' : 'the upload field does not hold the file and the page does not show it as attached', got: proof.held ?? null, appeared: proof.appeared?.length ? proof.appeared : undefined, acted: true };
         if (proof.note) stats.notes.push(`step ${step.i}: ${proof.note}`);
+        }
       }
       else if (step.op === 'drag') {
         const find = async (tg) => target.evaluate(([st]) => window.__FS.locate(st), [this.prep({ ...step, op: 'click', target: tg }, memo)]);
@@ -722,7 +839,10 @@ export class Foresight {
         if (!step.expect) stats.warnings.push(`step ${step.i}: dragged; without an "expect" nothing confirms where it landed`);
       }
       else {                                                  // hover / dblclick: real mouse on a located target
-        const loc = await target.evaluate(([s]) => window.__FS.locate(s), [this.prep({ ...step, op: 'click' }, memo)]);
+        const look = () => target.evaluate(([s]) => window.__FS.locate(s), [this.prep({ ...step, op: 'click' }, memo)]);
+        let loc = await look();
+        // a submenu that the hover before this one is still opening: it is on its way, so a short wait is worth it
+        for (const end = Date.now() + (['hover', ...PRESSES].includes(this._lastOp) ? 1500 : 400); (!loc.found || loc.p < need || loc.hidden) && Date.now() < end;) { await page.waitForTimeout(100); loc = await look(); }
         if (!loc.found) return { ...rec, status: 'notfound', closest: loc.closest };
         if (loc.p < need) return { ...rec, status: 'lowconf', p: +loc.p.toFixed(3), closest: loc.closest };
         if (loc.picked) stats.notes.push(`step ${step.i}: ${loc.picked}`);
@@ -762,7 +882,7 @@ export class Foresight {
     if (page.__fsNav === nav0) {
       let leaving = false;                                    // the old page says it is on its way out, or is already unreachable
       try { leaving = await page.evaluate(() => !window.__FS || window.__FS.leaving()); } catch { leaving = true; }
-      if (leaving) { const end = Date.now() + 8000; while (page.__fsNav === nav0 && Date.now() < end) await new Promise((r) => setTimeout(r, 25)); }
+      if (leaving) { const end = Date.now() + 8000, dl0 = page.__fsDl; while (page.__fsNav === nav0 && page.__fsDl === dl0 && Date.now() < end) await new Promise((r) => setTimeout(r, 25)); }
     }
     if (page.__fsNav > nav0) await this.pageReady(); else await this.ensureRuntime().catch(() => this.pageReady());
   }
@@ -812,6 +932,8 @@ export class Foresight {
 
   finish(plan, t0, stats, ok, reason) {
     try { this._cleanup?.(); } catch {}
+    // a click opened the browser's file chooser and the plan put nothing in it: say so, so the planner uses "upload"
+    if (this.page?.__fsChooser) { this.page.__fsChooser = null; stats.warnings.push('a click opened a file chooser and no file was given: to attach a file use {"upload": "<the name of that button>", "file": "..."} instead of a click'); }
     stats.dialogs = this._dialogs || [];
     return { plan: plan?.id, ok, reason, failedAt: ok ? undefined : this._fail?.i, failed: ok ? undefined : this._fail, ms: +(performance.now() - t0).toFixed(1), ...stats, windowCount: stats.windows.length };
   }

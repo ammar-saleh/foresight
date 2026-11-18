@@ -25,6 +25,9 @@ const inv = await tool('foresight_run', { session: 'mcp-check', steps: [{ clik: 
 ok('malformed plan is rejected', /no known action/.test(inv.content[0].text));
 const l = await tool('foresight_look', { session: 'mcp-check', find: 'Saved' });
 ok('look/find', /FIND "Saved"/.test(l.content[0].text));
+// a file the page hands over is kept in the session's own folder (never the user's Downloads) and listed in the result
+const dl = await tool('foresight_run', { session: 'mcp-check', steps: [{ goto: 'http://localhost:4600/apply.html?case=download' }, { click: 'Export as CSV', expect: { text: 'Export started' } }] });
+ok('download kept in the session folder', /"downloads":\[\{"file":"[^"]*downloads[^"]*mcp-check[^"]*export[^"]*\.csv","bytes":\d+/.test(dl.content[0].text.replace(/\\\\/g, '/')), dl.content[0].text.match(/"downloads":[^\]]*\]/)?.[0] || 'no downloads listed');
 ok('close', (await tool('foresight_close', { session: 'mcp-check' })).content[0].text === 'closed');
 ok('unknown tool -> error', !!(await rpc('tools/call', { name: 'nope', arguments: {} })).error);
 srv.stdin.end();

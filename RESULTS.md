@@ -11,7 +11,7 @@ Measured on 17 November 2026, on Windows.
 | Real-site suite: 18 kinds of task, end result checked independently | 36 of 36 correct |
 | Safety traps: 49 pages built to trick it, 2 runs each | 98 of 98 right outcome, 0 harmful actions |
 | Pages written to break it | 154 of 156 pass, 2 are known limits |
-| Abilities: shadow DOM, uploads, drag, rich text, canvas, new tabs, job-application form widgets | 68 of 68 |
+| Abilities: shadow DOM, uploads, drag, rich text, canvas, new tabs, job forms, everyday web widgets | 154 of 154 |
 | Windows desktop suite | 138 of 138, 0 harmful actions |
 
 ## Speed, engine only

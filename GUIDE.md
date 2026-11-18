@@ -38,6 +38,12 @@ foresight sessions | recipes | forget <recipe> | guide
 - `pressable "-- Select --" beside "Nationality"` is something you can press that is not built as a button (often a
   home-made dropdown). Click it by its text (`{"click": {"text": "-- Select --", "near": "Nationality"}}`), then click
   the choice that appears; or use `pick` on it by `css`.
+- `input[text] "City"  under "Shipping address"` — controls that read alike are listed with where they are: the
+  heading above them, or the row they sit in (`in the row "Grace"`). Use those words with `near`.
+- `slider "Volume" value=20 (from 0 to 100)` — set it with `fill` and a number.
+- `column header "Name" (press to sort)` — click it by its text.
+- `"(no label)"` is not a name: the control has none. Reach it by `css`, or by a caption beside it with `near`.
+- A button that holds only a picture is listed by the picture's label (`button "right"`).
 - `LINKS: N on this page` — links are not listed by default. Add `--links`. You can click any link or any visible text by its exact text even if it is not listed.
 - `hidden button ... css "button.destroy"` — exists but is not visible (often shown on hover). Target it by that `css`, usually with `near`. Foresight hovers the row for you.
 - `FRAME 1 (...)` — controls inside an embedded frame. Add `"frame": 1` to every step that acts there. Frame numbers can change after a page load; part of the frame's address also works: `"frame": "datepicker"`.
@@ -52,6 +58,8 @@ foresight sessions | recipes | forget <recipe> | guide
 - Only pop-ups that are built as dialogs show up as `DIALOG OPEN`. A pop-up made of plain boxes is simply part of the
   controls and text: if the look shows few controls, add `--text` to see what the page says.
 - `NOTE: this looks like a "prove you are human" check` means the page is nothing but such a check. Stop there.
+- A banner or pop-up that slides in after the page was printed is not in that print. If a step stops with `blocked`
+  or `interrupt`, look again.
 
 ### Reading data out of a page
 - `look <session> --find "Chrome"` prints, under `FIND "Chrome":`, each place the words occur, as the text of the record
@@ -61,6 +69,7 @@ foresight sessions | recipes | forget <recipe> | guide
   add `--text` to the run for all of it. Put what you need into `read` steps rather than fishing it out of the page print.
 - Inside a plan: `{"read": "Total"}` (the same as `--find`: the record each mention belongs to, long ones cut down),
   `{"read": {"css": ".price"}}`, or a table cell `{"read": {"row": "Smith", "col": "Email"}}` (row = its first column).
+  Add `"nth"` for one match only: `{"read": {"css": ".price", "nth": 2}}` (`-1` is the last).
   What was read comes back under `reads` in the result; an empty read is flagged under `warnings`.
   A `read` waits until data the page has asked its server for has arrived and the page has stopped redrawing. Where the
   new state has words of its own, still give the step before it an `expect` (it is the only real proof).
@@ -82,17 +91,25 @@ A JSON file: `{ "steps": [ ... ] }`. Step numbers start at 0. One action per ste
 | `{"dblclick": "Buy milk"}` / `{"rightclick": "Report.pdf"}` | real double-click / right-click |
 | `{"hover": "Account"}` | move the real mouse over something (menus that open on hover) |
 | `{"expand": "Home"}` | open a collapsed tree node / accordion / details (`expandable "..."` in the look). Only the node's own header or arrow is ever pressed; if it has neither, the run stops and you click the right part by `css` |
-| `{"upload": "Resume", "file": "C:/docs/cv.pdf"}` | attach a file to an upload field (a list of paths for several files). Two fields with the same name: `{"upload": {"label": "Attach", "near": "Cover Letter"}, ...}` or `"nth": 2`. The upload counts when the field holds the file, or when the page swaps the field for the file's name or a remove button |
+| `{"upload": "Resume", "file": "C:/docs/cv.pdf"}` | attach a file to an upload field (a list of paths for several files). Two fields with the same name: `{"upload": {"label": "Attach", "near": "Cover Letter"}, ...}` or `"nth": 2`. The upload counts when the field holds the file, or when the page swaps the field for the file's name or a remove button. If the page has no upload field of that name but one button of that name, the button is pressed and the file is given to the file chooser it opens |
 | `{"drag": "Task A", "to": "Done"}` | drag one thing onto another with the real mouse |
 | `{"scroll": "down", "expect": {"text": "Item 90"}}` | keep scrolling (`down`, `up`, `top`, `bottom`) until the expectation is true: for lists that load as you scroll |
-| `{"keys": "Enter"}` | press a real key (`Enter`, `Tab`, `Escape`, `ArrowDown`, `Control+A` ...) in the focused element |
+| `{"keys": "Enter"}` | press a real key (`Enter`, `Tab`, `Escape`, `ArrowDown`, `Control+A` ...) in the focused element. `"times": 5` presses it five times |
 | `{"type": "hello"}` | type with real keystrokes into the field that has focus (fails if no field has focus) |
-| `{"goto": "https://example.com/page"}` | load another address in the same session |
+| `{"goto": "https://example.com/page"}` | load another address in the same session. `"back"`, `"forward"` and `"reload"` work too |
 | `{"expect": {"text": "Ready"}}` | a step that only waits for / checks something |
 | `{"read": "Total"}` | read text back into the result (see above) |
 | `{"clickAt": {"css": "canvas", "x": 240, "y": 100}}` | last resort for things with no structure (a drawing, a game, a map): click a point, measured from that element's top-left corner. Without `css`, x/y are page pixels as in a `--screenshot`. Always give it an `expect`. |
 
 - `fill` then `{"keys": "Enter"}` is the way to submit a search box.
+- Sliders (`slider "Volume" value=20 (from 0 to 100)` in the look): `{"fill": "Volume", "value": 60}`. If the slider cannot show that exact value, the run stops and names the two nearest values.
+- A click with a key held down (to add to a selection): `{"click": "Row C", "hold": "Control"}` (`Shift`, `Alt` or `Meta` too).
+- A field named only by its placeholder, or by what was last chosen in it, changes its name once you use it. Keep using the name from your look: within one run the same name means the same control.
+- A list that lets you choose several things: one `pick` per value. If the list stays open, it is closed for you before the next step.
+- Code editors (CodeMirror, Monaco): `fill` replaces the whole text with real typing. The editor may add brackets or indents of its own; then the run stops and says so. `click` the editor and use `type` for small edits.
+- Rich-text editors with boxes inside them (image captions, tables): a click on the whole editor lands in its middle, which may be one of those boxes. Click a paragraph inside it by `css` instead.
+- A box that makes a new tag out of what you type ("Add great…"): `click` it, `type` the text, then `{"keys": "Enter"}`.
+- A file the page hands over ("Download", "Export") is saved in the session's own folder and listed under `downloads` in the result.
 - To edit text in place: `dblclick` it, then `{"keys": "Control+A"}`, `{"type": "new text"}`, `{"keys": "Enter"}`.
 - Use `radio` / `check` for radios and checkboxes, not `click`: they verify the new state. A plain `click` only proves the click happened.
 - Dates: give the value in the format the field itself shows (its placeholder or current value). For `input[date]` fields use `YYYY-MM-DD`. If the page rewrites what you typed into something different, Foresight stops before submitting and tells you what the field holds.
@@ -157,13 +174,15 @@ capitals. Anything else is a different value ("5.00" is not "500", "john.doe@x.c
 ### Clicks
 A click is a real mouse press at the control. Foresight watches where the press lands: if the control moved or something
 slid over it at that instant, the press is cancelled and tried again, and it is never delivered to anything else.
+If the press itself opens something over the control (a calendar over a date field), that is the control's answer and the step counts; a note says what opened.
+A tab that carries a count ("Issues 44") can be clicked by its name alone when it is the only one that reads like that.
 Foresight never repeats a click that did land. `"scripted": true` asks for a scripted click instead (no mouse). Use it
 when a stop says the real press "did not arrive in the page at all" although a screenshot shows the control free.
 
 ### Native pop-up dialogs
 JavaScript alerts are accepted, confirms/prompts are dismissed, "leave this page?" prompts are accepted, and all are
 listed in the result under `dialogs`. To accept a confirm, add `"dialog": "accept"` to the step that triggers it (`"dismiss"` is the
-other value). It applies to that one step only.
+other value). For a box that asks for text: `"dialog": {"answer": "Layla"}`. It applies to that one step only.
 
 ## Recipes: doing a known task again without looking
 - Add `--save <name>` to a run. If the whole plan succeeds it is saved for that site.
@@ -178,6 +197,7 @@ The result says `stuckAtStep`, `why`, often `closest` (the nearest names it foun
 how to resume, and shows the page as it is now. `detail.acted` says whether the step reached the page:
 `false` = certainly nothing was done; `true` = it was performed; `"unknown"` = it failed part-way, so look before you do anything.
 - `lowconf` — more than one thing matches, or the name is not close enough. Use the exact name, or `near` / `nth` / `css`.
+  When several controls share the name, `closest` says what each one is and where (`link`, `column header`, `under "Billing"`).
 - `notfound` — nothing matches. Check `closest`, look again (`--links` for links); it may be in a frame.
 - `disabled` — the control is disabled or read-only; something else must be done first, or it cannot be done.
 - `hidden` — the control exists but is not visible, even after hovering its row.
@@ -186,22 +206,27 @@ how to resume, and shows the page as it is now. `detail.acted` says whether the 
   pop-up, then resume from the stopped step.
 - `timeout` — your `expect` did not happen. **Read `next`:** if the step was performed and the page changed, the action probably worked and only your expectation was wrong. Look, then resume from the *following* step. Repeating it could do it twice.
 - `verify-failed` — the value did not stay in the field (see `got` / `fields` for what it holds now), no option matches exactly, the option is disabled, or two options read the same (see `options`), or the value is longer than the field allows. When `fields` names an earlier step, fix and resume from *that* step.
+  At the end of every run the boxes ticked and options chosen are read once more. If a later step undid one (a list that keeps only one row ticked), the run stops with "every step ran, but ... is no longer set".
 - `bad-expect` — the `expect` of an irreversible step was already true before the step. Nothing was done.
 - `conflict` — a field does not keep its value (another step or the page overrides it).
-- `nofocus` — `type` was used but no field has focus.
+- `nofocus` — `type` was used but no field has focus. After a click inside a frame, `type` goes to the field there by itself.
 - `nofile` — the file to upload does not exist.
-- `unsure` — the mouse went down on the control, then the page moved and the release was cancelled. It may or may not have acted: look.
+- `unsure` — the mouse went down on the control, then the page moved and the release was cancelled. It may or may not have acted: look. `released` says what took the release.
 - `error` / `gave-up` — something unexpected; read `why`, and check `detail.acted` before retrying.
 
 Fix that step in the plan file and resume with `--from N`. Earlier steps are not repeated.
 
+A warning that the page "asks you to prove you are human" means the steps did not reach the page they were written
+for, even if the run says ok. Stop and tell the user.
+
 Things Foresight already does by itself, so you do not need steps for them: scrolling a control into view,
-waiting for things to appear, finish animating or become enabled, closing a calendar or suggestion list that the
+waiting for things to appear, finish animating or become enabled (a tip that is fading out, a submenu that is
+still opening), closing a calendar or suggestion list that the
 previous field left open over the next one, hovering a row to reveal its buttons, waiting for a new page to finish
 loading, and falling back to real typing when a field or editor does not take scripted text.
 
 ## What Foresight cannot do yet
-Closed shadow roots, cross-window drag and drop, downloads, logins and bot checks, and anything that needs
+Closed shadow roots, cross-window drag and drop, logins and bot checks, and anything that needs
 judging a picture (use `--screenshot` and `clickAt` for that, and check the result).
 Never put passwords, card numbers or real personal data in a plan.
 

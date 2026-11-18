@@ -135,6 +135,23 @@ async function observation(page, o = {}, name = 'page') {
   return t;
 }
 
+// Files a page hands over ("Download", "Export") go to a folder of the session's own, never to the user's Downloads.
+const downloadDir = (name) => path.join(HOME, 'downloads', name);
+// (The browser profile is also made with that folder as its default, so nothing can land anywhere else. The connection
+// that asks for it is kept open for as long as the run lasts.)
+async function keepDownloads(browser, name) {
+  try { fs.mkdirSync(downloadDir(name), { recursive: true }); const cdp = await browser.newBrowserCDPSession(); await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.resolve(downloadDir(name)) }); } catch {}
+}
+const filesIn = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
+// name -> when it was last written (a file handed over twice keeps its name and is written again)
+const stamps = (dir) => new Map(filesIn(dir).map((f) => { try { return [f, fs.statSync(path.join(dir, f)).mtimeMs]; } catch { return [f, 0]; } }));
+// What arrived during a run (waiting a little for one that is still being written).
+async function newDownloads(name, had) {
+  const dir = downloadDir(name), partial = (f) => /\.(crdownload|tmp)$/i.test(f);
+  for (const end = Date.now() + 8000; filesIn(dir).some((f) => !had.has(f) && partial(f)) && Date.now() < end;) await new Promise((r) => setTimeout(r, 150));
+  return [...stamps(dir)].filter(([f, at]) => !had.has(f) || at > had.get(f)).map(([f]) => f).map((f) => (partial(f) ? { file: path.join(dir, f), unfinished: true } : { file: path.join(dir, f), bytes: fs.statSync(path.join(dir, f)).size }));
+}
+
 export async function open(name, url, o = {}) {
   try {
     if (!okName(name)) return out(2, BAD_NAME);
@@ -142,6 +159,7 @@ export async function open(name, url, o = {}) {
     fs.mkdirSync(HOME, { recursive: true });
     if (fs.existsSync(stateFile(name))) return out(2, `session "${name}" is already open: close it first, or use another name`);
     const exe = findBrowser();
+    fs.mkdirSync(downloadDir(name), { recursive: true });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foresight-'));
     try {
       fs.mkdirSync(path.join(dir, 'Default'), { recursive: true });
@@ -149,6 +167,7 @@ export async function open(name, url, o = {}) {
         credentials_enable_service: false, credentials_enable_autosignin: false,
         profile: { password_manager_enabled: false, password_manager_leak_detection: false, default_content_setting_values: { notifications: 2, geolocation: 2 } },
         translate: { enabled: false }, autofill: { profile_enabled: false, credit_card_enabled: false },
+        download: { default_directory: path.resolve(downloadDir(name)), prompt_for_download: false, directory_upgrade: true }, savefile: { default_directory: path.resolve(downloadDir(name)) },
       }));
     } catch {}
     const proc = spawn(exe, ['--remote-debugging-port=0', `--user-data-dir=${dir}`, ...(o.headed ? [] : ['--headless=new']), '--no-first-run', '--no-default-browser-check', '--disable-features=PasswordLeakDetection,Translate,AutofillServerCommunication', '--disable-save-password-bubble', '--disable-notifications', '--window-size=1280,900', 'about:blank'], { detached: true, stdio: 'ignore' });
@@ -163,6 +182,7 @@ export async function open(name, url, o = {}) {
     let browser;
     try {
       const c = await connect(st, name); browser = c.browser; const page = c.page;
+      await keepDownloads(browser, name);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
       st.target = await targetIdOf(page);
       fs.writeFileSync(stateFile(name), JSON.stringify(st));
@@ -213,6 +233,8 @@ export async function run(name, plan, o = {}) {
     const unfilled = o.recipe ? [] : varsOf(plan).map((v) => `{{${v}}}`);
     if (unfilled.length && o.save) return out(2, `the plan contains ${unfilled.join(', ')}: to save it as a recipe, run it with values for them ("vars"), otherwise the placeholder text itself would be typed into the page`);
     const startUrl = page.url();
+    await keepDownloads(browser, name);
+    const hadFiles = stamps(downloadDir(name));
     const fx = new Foresight({ irreversible: 'verify', useCache: false });
     fx.page = page;
     let r;
@@ -221,8 +243,11 @@ export async function run(name, plan, o = {}) {
     const now = fx.page;                                         // a step of the plan may have moved the work to a new tab
     st.runs++; st.roundTrips += r.roundTrips; st.target = (await targetIdOf(now)) || st.target; fs.writeFileSync(stateFile(name), JSON.stringify(st));
     if (unfilled.length) r.warnings.push(`the plan contains ${unfilled.join(', ')} and no values were given for them, so that text was used as it stands`);
+    await new Promise((res) => setTimeout(res, 250));            // a download starts a moment after the click that asked for it
+    const downloads = await newDownloads(name, hadFiles);
     const head = { ok: r.ok, stepsTotal: plan.steps.length, stepsRun: r.ok ? plan.steps.length - from : undefined, engineMs: r.ms, roundTrips: r.roundTrips,
-      reads: r.reads?.length ? r.reads : undefined, notes: r.notes?.length ? r.notes : undefined, repairs: r.repairs.length ? r.repairs : undefined, warnings: r.warnings.length ? r.warnings : undefined, dialogs: r.dialogs.length ? r.dialogs : undefined };
+      reads: r.reads?.length ? r.reads : undefined, notes: r.notes?.length ? r.notes : undefined, repairs: r.repairs.length ? r.repairs : undefined, warnings: r.warnings.length ? r.warnings : undefined, dialogs: r.dialogs.length ? r.dialogs : undefined,
+      downloads: downloads.length ? downloads : undefined };
     if (!r.ok || head.reads || head.notes || head.repairs || head.warnings || head.dialogs) head.quoted = QUOTED;
     let t;
     if (r.ok) {

@@ -131,7 +131,44 @@ function questions(kind) {
   $('#city').addEventListener('keyup', async (e) => { if (!e.isTrusted) return; if (kind === 'slow') { await fetch('style.css?suggest=' + encodeURIComponent($('#city').value)).catch(() => {}); await new Promise((r) => setTimeout(r, 1600)); } show(); });
 }
 
+// ---- upload buttons with no file field behind them: the field is made when the button is pressed
+function choosers(kind) {
+  const show = (id, f) => { window.__state.files[id] = f.name; $('#got-' + id).textContent = f.name; };
+  const zone = (id, label) => `<div class="grp"><h3>${label === 'Upload' ? 'Documents' : label.replace('Upload ', '')}</h3><div class="btns"><button type="button" class="pill" id="b-${id}">${label}</button><span id="got-${id}" class="fname"></span></div></div>`;
+  if (kind === 'made') {                                      // nothing of type=file is in the page until the press
+    app.innerHTML = zone('photo', 'Upload photo');
+    $('#b-photo').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.onchange = () => i.files[0] && show('photo', i.files[0]); i.click(); };
+  } else if (kind === 'two') {                                // two nameless hidden fields, each behind its own named button
+    app.innerHTML = zone('photo', 'Upload photo') + zone('id', 'Upload ID') + `<input type="file" class="vh" id="f-photo"><input type="file" class="vh" id="f-id">`;
+    for (const id of ['photo', 'id']) { $('#b-' + id).onclick = () => $('#f-' + id).click(); $('#f-' + id).onchange = (e) => e.target.files[0] && show(id, e.target.files[0]); }
+  } else {                                                    // a button called "Upload" that opens the page's own box, not a file chooser
+    app.innerHTML = zone('doc', 'Upload') + `<div id="box" class="card hide" style="margin-top:14px">Drop your files here</div>`;
+    $('#b-doc').onclick = () => { if (window.__state.boxOpened) harm('pressed Upload twice'); window.__state.boxOpened = true; $('#box').classList.remove('hide'); };
+  }
+}
+
+// ---- suggestions with a main text and a second line (a place and its country)
+function places(two, inline) {
+  const data = [['Paris', 'France', 'paris-fr'], ['Parma', 'Italy', 'parma'], ['Perth', 'Australia', 'perth']].concat(two ? [['Paris', 'Texas, USA', 'paris-tx']] : []);
+  app.innerHTML = field('City', 'city', 'autocomplete="off"') + `<div class="sel" id="sugg"></div>` + `<div class="actions"><button type="button" id="send">Search</button></div><div id="out" class="out" role="status"></div>`;
+  const c = $('#city'), box = $('#sugg');
+  c.addEventListener('input', () => { box.innerHTML = ''; delete window.__state.place; const q = c.value.trim().toLowerCase(); if (q.length < 2) return;
+    const m = document.createElement('div'); m.className = 'menu';
+    for (const [main, sub, id] of data.filter(([x]) => x.toLowerCase().startsWith(q))) { const o = document.createElement('div'); o.className = 'opt'; if (inline) o.style.display = 'block'; o.innerHTML = `<span class="main"></span><span class="sub" style="color:var(--muted)"></span>`; $('.main', o).textContent = main; $('.sub', o).textContent = sub;
+      o.addEventListener('mousedown', (e) => e.preventDefault()); o.onclick = () => { c.value = `${main}, ${sub}`; window.__state.place = id; box.innerHTML = ''; }; m.append(o); }
+    box.append(m); });
+  $('#send').onclick = () => { if (window.__state.sent) { harm('searched twice'); return; } window.__state.sent = window.__state.place || 'nothing chosen'; $('#out').textContent = 'Searching: ' + window.__state.sent; };
+}
+
+// ---- a link that hands the browser a file to save
+function downloads() {
+  app.innerHTML = `<p>Your statement for October is ready.</p><div class="actions"><a id="dl" href="style.css" download="statement-october.txt">Download statement</a><button type="button" id="gen">Export as CSV</button></div><div id="out" class="out" role="status"></div>`;
+  $('#gen').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['date,amount', String.fromCharCode(10), '2026-10-01,12.50', String.fromCharCode(10)], { type: 'text/csv' })); a.download = 'export.csv'; a.click(); $('#out').textContent = 'Export started'; };
+}
+
 const CASES = {
+  download: downloads,
+  chooser: () => choosers('made'), 'chooser-two': () => choosers('two'), 'chooser-none': () => choosers('none'), places: () => places(false), 'places-two': () => places(true), 'places-inline': () => places(false, true),
   attach: () => uploads('swap'), 'attach-slow': () => uploads('slow'), 'attach-plain': () => uploads('swap', false), 'attach-keep': () => uploads('keep'),
   'attach-icon': () => uploads('icon'), 'attach-reject': () => uploads('reject'),
   'phone-code': phoneSelect, 'phone-flag': phoneFlag, plain: () => questions('keys'), 'keys-slow': () => questions('slow'),

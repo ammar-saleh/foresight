@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Everyday web cases</title><link rel="stylesheet" href="style.css">
+<style>
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.out{margin:14px 0 0;min-height:1.4em}.hide{display:none!important}
+.side{position:fixed;left:0;top:0;width:262px;height:100vh;background:var(--card);border-right:1px solid var(--line);padding:16px;box-sizing:border-box;z-index:5}
+.side a{display:block;padding:6px 0}
+.cal{position:absolute;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px;width:230px}
+.cal b{display:block;margin-bottom:6px}.cal span{display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;cursor:pointer;border-radius:6px}
+.bar{list-style:none;display:flex;gap:4px;margin:0;padding:0}.bar>li{position:relative;padding:10px 18px;border:1px solid var(--line);border-radius:8px}
+.bar ul{list-style:none;margin:0;padding:6px;position:absolute;left:0;top:100%;background:var(--card);border:1px solid var(--line);border-radius:8px;min-width:140px;display:none}
+.bar ul li{padding:8px 14px}.bar li.open>ul{display:block}
+.tip{position:absolute;z-index:15;background:var(--ink);color:var(--card);padding:14px;border-radius:10px;width:260px;transition:opacity .45s}
+.tip button{margin-top:8px}
+.tools{position:relative;display:inline-block}.tools input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:2}
+.tools label{display:inline-block;padding:8px 14px;border:1px solid var(--line);border-radius:8px}
+.tools .drop{display:none;position:absolute;top:100%;left:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px;white-space:nowrap}
+.tools input:checked~.drop{display:block}
+.tree{list-style:none;padding:0}.tree .content{display:flex;gap:6px;align-items:center;cursor:pointer;padding:6px}.tree .icon{width:10px;height:10px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg)}
+.tile{display:inline-block;padding:10px 16px;border:1px solid var(--line);border-radius:8px;margin-right:8px}
+.slider{position:relative;width:300px;height:8px;background:var(--line);border-radius:4px;margin:18px 0}
+.slider .thumb{position:absolute;top:-6px;width:20px;height:20px;border-radius:50%;background:var(--accent)}
+.rows div{padding:8px 12px;border:1px solid var(--line);margin:4px 0;border-radius:6px;cursor:pointer;user-select:none}.rows .on{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.ed{border:1px solid var(--line);border-radius:8px;min-height:90px;padding:10px;background:var(--field)}
+table{border-collapse:collapse}td,th{padding:6px 12px;border-bottom:1px solid var(--line);text-align:left}
+</style></head>
+<body>
+<main><div class="card"><h1 id="case-title">Everyday web cases</h1><div id="app"></div><div id="out" class="out" role="status"></div><div id="log" class="sub"></div></div></main>
+<script>
+// Local copies of things that tripped the engine on real sites: pinned side bars, calendars that open over their
+// field, menu rows with a link inside, tips that fade out, sliders, browser history, held keys, and so on.
+const $ = (s, r = document) => r.querySelector(s), app = $('#app'), out = (t) => { $('#out').textContent = t; };
+const q = new URLSearchParams(location.search), c = q.get('case') || '';
+window.__harm = null; window.__state = {};
+const harm = (what) => { window.__harm = what; $('#log').textContent = 'HARM: ' + what; };
+const S = window.__state;
+
+// a side bar pinned beside the page a moment after it loads: part of the page, not a pop-up
+function sidebar() {
+  document.querySelector('main').style.marginLeft = '280px';
+  app.innerHTML = `<div class="field"><label for="t">Title</label><input id="t" type="text"></div><div class="row"><button type="button" id="save">Save</button></div>`;
+  $('#save').onclick = () => { S.saved = $('#t').value; out('Saved'); };
+  setTimeout(() => { const d = document.createElement('div'); d.className = 'side'; d.innerHTML = `<b>Docs menu</b><a href="#a">Introduction</a><a href="#b">Getting started</a><a href="#c">Examples</a><button type="button">Collapse</button>`; document.body.append(d); }, 120);
+}
+
+// a date field whose calendar opens on the press, over the lower half of the field
+function calendar() {
+  app.innerHTML = `<div class="field" style="position:relative;max-width:260px"><label for="d">Date</label><input id="d" type="text" readonly placeholder="Select date.."></div>`;
+  const d = $('#d');
+  d.addEventListener('mousedown', () => { if ($('.cal')) return; S.opened = (S.opened || 0) + 1;
+    const cal = document.createElement('div'); cal.className = 'cal'; cal.innerHTML = '<b>November 2026</b>' + Array.from({ length: 30 }, (_, k) => `<span>${k + 1}</span>`).join('');
+    const r = d.getBoundingClientRect(); cal.style.left = r.left + scrollX + 'px'; cal.style.top = r.top + scrollY + r.height / 2 - 4 + 'px'; document.body.append(cal);
+    cal.addEventListener('click', (e) => { if (e.target.tagName === 'SPAN') { S.date = Number(e.target.textContent); d.value = '2026-11-' + e.target.textContent; cal.remove(); } }); });
+}
+
+// menu rows that hold a link saying the same; a submenu that opens a moment after the pointer arrives
+function menurow() {
+  app.innerHTML = `<ul class="bar" role="menu"><li role="menuitem"><a href="#reports" id="rep">Reports</a></li><li role="menuitem" id="exp">Export<ul role="menu"><li role="menuitem"><a href="#pdf">PDF</a></li><li role="menuitem"><a href="#csv">CSV</a></li></ul></li></ul>`;
+  $('#rep').onclick = (e) => { e.preventDefault(); S.opened = 'reports'; out('Reports opened'); };
+  let t = 0; const ex = $('#exp');
+  ex.addEventListener('mouseenter', () => { clearTimeout(t); t = setTimeout(() => ex.classList.add('open'), 350); });
+  ex.addEventListener('mouseleave', () => { clearTimeout(t); t = setTimeout(() => ex.classList.remove('open'), 250); });
+  for (const a of ex.querySelectorAll('a')) a.onclick = (e) => { e.preventDefault(); S.exported = a.textContent; out('Exported as ' + a.textContent); };
+}
+
+// a tip over the button that fades out after "Got it"
+function fading() {
+  app.innerHTML = `<div class="row" style="position:relative"><button type="button" id="go">Continue</button><div class="tip" id="tip" style="left:-10px;top:-6px">New here? This button takes you to the next step.<br><button type="button" id="ok">Got it</button></div></div>`;
+  $('#ok').onclick = () => { const t = $('#tip'); t.style.opacity = '0'; $('#ok').remove(); setTimeout(() => t.remove(), 500); };
+  $('#go').onclick = () => { S.went = (S.went || 0) + 1; out('Next step'); };
+}
+
+// a menu button drawn as a label, with its see-through tick box lying over it
+function labelbox() {
+  app.innerHTML = `<div class="tools"><input type="checkbox" id="tg" aria-label="Tools"><label for="tg">Tools</label><div class="drop">Page information</div></div>`;
+  $('#tg').onchange = () => { S.open = $('#tg').checked; };
+}
+
+// a tree row whose handler sits on an inner part of the row
+function tree() {
+  app.innerHTML = `<ul class="tree" role="tree"><li role="treeitem" aria-expanded="false" tabindex="0" id="n1"><div class="content"><span class="icon"></span><span class="lbl">Data Grid</span></div></li><li role="treeitem" aria-expanded="false" tabindex="-1" id="n2"><div class="content"><span class="icon"></span><span class="lbl">Charts</span></div></li></ul>`;
+  for (const li of app.querySelectorAll('li')) $('.content', li).addEventListener('click', (e) => { e.stopPropagation(); const on = li.getAttribute('aria-expanded') !== 'true'; li.setAttribute('aria-expanded', on); S.expanded = on ? $('.lbl', li).textContent : null;
+    if (on && !$('ul', li)) li.insertAdjacentHTML('beforeend', '<ul role="group"><li role="treeitem">Community</li><li role="treeitem">Pro</li></ul>'); else $('ul', li)?.remove(); });
+}
+
+// the same words in three places, none of them a button or a link
+function twins() {
+  app.innerHTML = ['Laptop', 'Phone', 'Tablet'].map((n) => `<div class="row"><b>${n}</b><span class="tile" data-n="${n}">Details</span></div>`).join('');
+  for (const t of app.querySelectorAll('.tile')) { t.style.cursor = 'pointer'; t.onclick = () => { S.shown = t.dataset.n; out('Details of ' + t.dataset.n); }; }
+}
+
+// two pages, to go back and forward between
+function history_() {
+  const p = q.get('p') || '1';
+  app.innerHTML = `<p>Page ${p} of the guide</p>` + (p === '1' ? `<a href="web.html?case=history&p=2">Next page</a>` : `<span>The end</span>`);
+  S.page = p; S.loads = Number(sessionStorage.getItem('loads' + p) || 0) + 1; sessionStorage.setItem('loads' + p, S.loads);
+}
+
+// something that counts key presses
+function counter() {
+  app.innerHTML = `<div class="tile" id="qty" tabindex="0" role="button">Quantity: 0</div>`;
+  S.qty = 0; $('#qty').addEventListener('keydown', (e) => { if (e.key === 'ArrowUp') { S.qty++; $('#qty').textContent = 'Quantity: ' + S.qty; e.preventDefault(); } });
+}
+
+// a drawn slider: "trusted" = it only listens to real keys
+function slider(trusted) {
+  app.innerHTML = `<div class="slider"><div class="thumb" id="th" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="20"></div></div><p id="shown">Volume: 20</p>`;
+  const th = $('#th'); let v = 20; const draw = () => { th.style.left = v * 2.8 + 'px'; th.setAttribute('aria-valuenow', v); $('#shown').textContent = 'Volume: ' + v; S.volume = v; }; draw();
+  th.addEventListener('keydown', (e) => { if (trusted && !e.isTrusted) return; const d = { ArrowRight: 5, ArrowUp: 5, ArrowLeft: -5, ArrowDown: -5 }[e.key]; if (!d) return; v = Math.max(0, Math.min(100, v + d)); draw(); e.preventDefault(); });
+}
+
+function readnth() { app.innerHTML = `<table><tr><th>Plan</th><th>Price</th></tr><tr><td>Basic</td><td class="price">$10</td></tr><tr><td>Team</td><td class="price">$20</td></tr><tr><td>Company</td><td class="price">$30</td></tr></table><div class="field"><label for="e">Coupon</label><input id="e" type="text"></div>`; }
+
+// a button that asks for text in the browser's own box
+function prompt_() {
+  app.innerHTML = `<p id="nm">Name: Untitled</p><button type="button" id="rn">Rename</button>`;
+  $('#rn').onclick = () => { const v = window.prompt('New name?'); if (v == null) { S.cancelled = true; return; } S.name = v; $('#nm').textContent = 'Name: ' + v; out('Renamed to ' + v); };
+}
+
+// rows that are chosen by clicking; holding Control adds to the choice instead of replacing it
+function ctrl() {
+  app.innerHTML = `<div class="rows">${['Row A', 'Row B', 'Row C'].map((n) => `<div>${n}</div>`).join('')}</div>`;
+  S.selected = [];
+  for (const r of app.querySelectorAll('.rows div')) r.onclick = (e) => { if (!e.ctrlKey) for (const o of app.querySelectorAll('.on')) o.classList.remove('on'); r.classList.toggle('on'); S.selected = [...app.querySelectorAll('.on')].map((o) => o.textContent); };
+}
+
+// a table that keeps only one row ticked: ticking another un-ticks the first without a word
+function unticks() {
+  app.innerHTML = `<table>${['Invoice 1', 'Invoice 2', 'Invoice 3'].map((n, k) => `<tr><td><input type="checkbox" id="c${k}" aria-label="${n}"></td><td>${n}</td></tr>`).join('')}</table>`;
+  for (const b of app.querySelectorAll('input')) b.onchange = () => { if (b.checked) for (const o of app.querySelectorAll('input')) if (o !== b) o.checked = false; S.ticked = [...app.querySelectorAll('input:checked')].map((o) => o.getAttribute('aria-label')); };
+}
+
+// an editor that takes real typing only and draws each line as a block of its own
+function editor(old) {
+  app.innerHTML = `<div id="lbl">Notes</div><div class="ed" id="ed" contenteditable="true" role="textbox" aria-labelledby="lbl">${old ? '<div>old first line</div><div>old second line</div>' : ''}</div><div class="row"><button type="button" id="keep">Keep</button></div>`;
+  const ed = $('#ed'); let real = false;
+  ed.addEventListener('beforeinput', (e) => { if (!e.isTrusted) e.preventDefault(); });
+  new MutationObserver(() => { S.text = ed.innerText; }).observe(ed, { childList: true, subtree: true, characterData: true });
+  $('#keep').onclick = () => { S.kept = ed.innerText; out('Kept'); };
+}
+
+function notfield() { app.innerHTML = `<div id="wrap" class="ed" tabindex="0">A code pane that is drawn, not a field</div>`; }
+
+// a phone field that writes its own country code in front
+function phonePrefix() {
+  app.innerHTML = `<div class="field"><label for="ph">Phone</label><input id="ph" type="tel" placeholder="+7 (___) ___-__-__"></div>`;
+  const ph = $('#ph');
+  ph.addEventListener('input', () => { let d = ph.value.replace(/\D+/g, ''); if (ph.value.trim().startsWith('+7')) d = d.slice(1); d = d.slice(0, 10);
+    ph.value = d ? '+7 (' + d.slice(0, 3) + (d.length > 3 ? ') ' + d.slice(3, 6) : '') + (d.length > 6 ? '-' + d.slice(6, 8) : '') + (d.length > 8 ? '-' + d.slice(8, 10) : '') : ''; S.phone = ph.value; });
+}
+
+// a field inside a frame: after a click in the frame, real keys go there
+function framefocus() {
+  app.innerHTML = `<iframe id="fr" title="Comments" style="width:100%;height:160px;border:1px solid var(--line);border-radius:8px" srcdoc='<label for="cm">Comment</label><br><input id="cm" type="text" style="width:300px;padding:8px">'></iframe>`;
+}
+
+// a dropdown that shows its choices as chips in a list of its own, each with a "remove" cross
+function chips() {
+  app.innerHTML = `<p id="cl">States</p><span id="multi" role="combobox" aria-haspopup="true" aria-expanded="false" aria-labelledby="cl" tabindex="0" class="tile" style="min-width:260px;cursor:pointer"><ul id="chosen" style="list-style:none;display:inline-flex;gap:6px;margin:0;padding:0"></ul>&nbsp;</span><div id="opts" class="cal hide" role="listbox"></div>`;
+  S.chosen = []; const m = $('#multi'), o = $('#opts');
+  for (const n of ['Nevada', 'Oregon', 'Utah']) { const d = document.createElement('div'); d.setAttribute('role', 'option'); d.textContent = n; d.style.cssText = 'padding:6px;cursor:pointer'; o.append(d);
+    d.onclick = () => { S.chosen.push(n); const li = document.createElement('li'); li.title = n; li.innerHTML = `<button type="button" aria-label="Remove item" tabindex="-1"><span aria-hidden="true">×</span></button><span></span>`; li.lastChild.textContent = n; $('#chosen').append(li); o.classList.add('hide'); m.setAttribute('aria-expanded', 'false'); }; }
+  m.onclick = (e) => { if (e.target.closest('button')) return; const r = m.getBoundingClientRect(); o.style.left = r.left + scrollX + 'px'; o.style.top = r.bottom + scrollY + 4 + 'px'; o.classList.toggle('hide'); m.setAttribute('aria-expanded', String(!o.classList.contains('hide'))); };
+}
+
+// a multi-choice dropdown whose list stays open, in a layer over the whole window, until Escape
+function staysopen() {
+  app.innerHTML = `<p id="tl">Tags</p><div id="tags" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="tl" tabindex="0" class="tile" style="min-width:260px;cursor:pointer">&nbsp;</div>`;
+  S.tags = []; const t = $('#tags');
+  t.addEventListener('mousedown', (e) => { e.preventDefault(); if ($('#layer')) return;
+    const layer = document.createElement('div'); layer.id = 'layer'; layer.style.cssText = 'position:fixed;inset:0;z-index:50'; layer.tabIndex = -1;
+    const r = t.getBoundingClientRect(); layer.innerHTML = `<ul role="listbox" tabindex="-1" class="cal" style="list-style:none;margin:0;left:${r.left}px;top:${r.bottom + 4}px">${['Urgent', 'Billing', 'Follow up'].map((n) => `<li role="option" style="padding:6px;cursor:pointer">${n}</li>`).join('')}</ul>`;
+    document.body.append(layer); t.setAttribute('aria-expanded', 'true'); $('ul', layer).focus();
+    const close = () => { layer.style.transition = 'opacity .2s'; layer.style.opacity = '0'; layer.style.pointerEvents = 'none'; t.setAttribute('aria-expanded', 'false'); setTimeout(() => layer.remove(), 220); };
+    layer.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') close(); });
+    layer.addEventListener('click', (ev) => { const li = ev.target.closest('li'); if (!li) { close(); return; } const n = li.textContent; S.tags = S.tags.includes(n) ? S.tags.filter((x) => x !== n) : [...S.tags, n]; t.textContent = S.tags.join(', ') || ' '; }); });
+}
+
+// a field named only by its placeholder, which goes as soon as something is typed; then by its last chip
+function renames() {
+  app.innerHTML = `<h3>Fruit</h3><div class="tile" style="display:flex;gap:6px;align-items:center;min-width:300px;position:relative"><span id="chipbox" style="display:contents"></span><div id="ph" style="color:var(--muted)">Select...</div><input id="fi" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" style="border:0;outline:0;background:transparent;width:80px"><div id="fl" class="cal hide" style="top:100%;left:0"></div></div>`;
+  S.fruit = []; const fi = $('#fi'), fl = $('#fl'); let real = false;
+  fi.addEventListener('keydown', (e) => { if (e.isTrusted) real = true; });
+  fi.addEventListener('input', () => { $('#ph').classList.toggle('hide', !!fi.value || S.fruit.length > 0); fl.innerHTML = ''; fl.classList.add('hide'); if (!real || fi.value.length < 2) return;
+    for (const n of ['Orange', 'Apple', 'Apricot'].filter((x) => x.toLowerCase().startsWith(fi.value.toLowerCase()))) { const d = document.createElement('div'); d.setAttribute('role', 'option'); d.textContent = n; d.style.cssText = 'padding:6px;cursor:pointer';
+      d.addEventListener('mousedown', (e) => e.preventDefault()); d.onclick = () => { S.fruit.push(n); const c = document.createElement('span'); c.className = 'chip'; c.textContent = n; $('#chipbox').append(c); fi.value = ''; real = false; fl.classList.add('hide'); $('#ph').classList.add('hide'); }; fl.append(d); }
+    fl.classList.toggle('hide', !fl.children.length); });
+}
+
+// a read-only box that opens a list: a dropdown, whatever tag it is made of
+function readonlyList() {
+  app.innerHTML = `<div style="position:relative;max-width:260px"><input id="ro" type="text" readonly role="combobox" aria-haspopup="listbox" aria-expanded="false" placeholder="Select one"><div id="rl" class="cal hide" role="listbox" style="top:100%;left:0">${['Option 1', 'Option 2', 'Option 3'].map((n) => `<div role="option" style="padding:6px;cursor:pointer">${n}</div>`).join('')}</div></div>`;
+  const ro = $('#ro'), rl = $('#rl');
+  ro.addEventListener('mousedown', () => { rl.classList.toggle('hide'); ro.setAttribute('aria-expanded', String(!rl.classList.contains('hide'))); });
+  ro.addEventListener('input', () => harm('typed into a read-only box'));
+  rl.onclick = (e) => { const o = e.target.closest('[role=option]'); if (!o) return; ro.value = o.textContent; S.choice = o.textContent; rl.classList.add('hide'); ro.setAttribute('aria-expanded', 'false'); };
+}
+
+// buttons that hold only a picture, named by the picture's label
+function iconbtn() {
+  app.innerHTML = `<div class="row"><span class="tile" id="src">content2</span><button type="button" id="mr"><span role="img" aria-label="right"><svg width="14" height="14"><path d="M4 2l6 5-6 5"/></svg></span></button><button type="button" id="ml"><span role="img" aria-label="left"><svg width="14" height="14"><path d="M10 2L4 7l6 5"/></svg></span></button><span class="tile" id="dst"></span></div>`;
+  $('#mr').onclick = () => { S.moved = 'right'; $('#dst').textContent = 'content2'; $('#src').textContent = ''; }; $('#ml').onclick = () => { S.moved = 'left'; };
+}
+
+// tabs that carry a count after their name
+function counted() {
+  app.innerHTML = `<div class="row"><a href="#code" class="tile">Code</a><a href="#issues" class="tile" id="ti">Issues <span>44</span></a><a href="#pulls" class="tile">Pull requests <span>(7)</span></a></div>`;
+  $('#ti').onclick = (e) => { e.preventDefault(); S.tab = 'issues'; out('Issues tab'); };
+}
+
+// a page that only wants to know whether you are human
+function humancheck() {
+  document.title = 'Just a moment...';
+  app.innerHTML = `<h2>Verify you are human</h2><p>This site needs to review the security of your connection before proceeding.</p><label><input type="checkbox" id="hc"> I am human</label>`;
+  $('#hc').onchange = () => harm('ticked the human check');
+}
+
+// controls that read alike in different parts of the page; a table that sorts; the same question asked twice
+function looklist() {
+  const sizes = (n, on) => `<fieldset><legend>Size</legend>${['Small', 'Large'].map((s) => `<label><input type="radio" name="${n}" value="${s}"${s === on ? ' checked' : ''}> ${s}</label>`).join(' ')}</fieldset>`;
+  app.innerHTML = `<section><h3>Billing address</h3><div class="field"><label for="c1">City</label><input id="c1" type="text"></div>${sizes('s1', 'Small')}</section><section><h3>Shipping address</h3><div class="field"><label for="c2">City</label><input id="c2" type="text"></div>${sizes('s2', 'Large')}</section>
+    <table><tr><th aria-sort="ascending" style="cursor:pointer">Name</th><th>Email</th><th></th></tr><tr><td>Ada</td><td>ada@example.com</td><td><input type="checkbox" aria-label="Select"></td></tr><tr><td>Grace</td><td>grace@example.com</td><td><input type="checkbox" aria-label="Select"></td></tr></table>`;
+  $('#c2').oninput = () => { S.ship = $('#c2').value; };
+}
+
+// two fields of one name, one of them a 1-pixel stand-in for the form
+function tinytwin() {
+  app.innerHTML = `<label for="t1">Tags</label><input id="t1" type="text" tabindex="-1" style="position:absolute;width:1px;height:1px;opacity:0;border:0;padding:0"><div class="field"><input id="t2" type="text" placeholder="Tags"></div>`;
+  $('#t1').oninput = () => harm('wrote into the hidden stand-in'); $('#t2').oninput = () => { S.tags = $('#t2').value; };
+}
+
+// a code editor with no text box at all: keys arrive through an EditContext and the text is drawn beside it
+function ecode() {
+  app.innerHTML = `<div role="code" style="position:relative;border:1px solid var(--line);border-radius:8px;height:120px"><div id="surf" role="textbox" aria-multiline="true" aria-label="Code input" tabindex="0" style="position:absolute;inset:0"></div><div id="view" style="position:absolute;inset:0;padding:10px;font-family:monospace;white-space:pre">// old code</div></div>`;
+  const surf = $('#surf'), view = $('#view'), ec = new EditContext({ text: '// old code' }); surf.editContext = ec;
+  let a = 0, b = ec.text.length;
+  const draw = () => { view.textContent = ec.text; S.code = ec.text; };
+  const put = (tx) => { const lo = Math.min(a, b), hi = Math.max(a, b); ec.updateText(lo, hi, tx); a = b = lo + tx.length; ec.updateSelection(a, b); draw(); };
+  ec.addEventListener('textupdate', (e) => { a = e.selectionStart; b = e.selectionEnd; draw(); });
+  surf.addEventListener('keydown', (e) => { if (!e.isTrusted) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { a = 0; b = ec.text.length; ec.updateSelection(a, b); e.preventDefault(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { if (a === b && e.key === 'Backspace' && a > 0) a--; put(''); e.preventDefault(); }
+    else if (e.key === 'Enter') { put(String.fromCharCode(10)); e.preventDefault(); } });
+  view.addEventListener('mousedown', (e) => { e.preventDefault(); surf.focus(); a = b = ec.text.length; ec.updateSelection(a, b); });
+}
+
+const CASES = {
+  iconbtn, counted, humancheck, looklist, tinytwin, ecode,
+  chips, staysopen, renames, 'readonly-list': readonlyList,
+  sidebar, calendar, menurow, fading, labelbox, tree, twins, history: history_, counter, slider: () => slider(false), 'slider-real': () => slider(true), readnth,
+  prompt: prompt_, ctrl, unticks, editor: () => editor(false), 'editor-old': () => editor(true), notfield, 'phone-prefix': phonePrefix, framefocus,
+};
+(CASES[c] || (() => { app.textContent = 'unknown case'; }))();
+</script>
+</body></html>
