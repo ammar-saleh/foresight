@@ -51,6 +51,44 @@ const CASES = [
     steps: [{ click: 'Generate', expect: { text: 'Your code is', timeout: 1200 } }], check: async () => true },
   { name: 'delayed-text', label: 'delayed-text-wait', what: 'same, with a long enough wait', want: DONE,
     steps: [{ click: 'Generate', expect: { text: 'Your code is', timeout: 6000 } }, { read: 'Your code is' }], check: async (p, r) => (await st(p)).code === '7391' && /7391/.test(JSON.stringify(r.reads)) },
+  // ---- patterns from real job-application forms (site/apply.html) ----
+  // two upload fields whose buttons are both called "Attach"; the page swaps the input for the file's name and "Remove file"
+  { name: 'attach', page: 'apply.html', label: 'attach-near', what: 'two "Attach" uploads: the one near "Resume/CV"', want: DONE,
+    steps: [{ upload: { label: 'Attach', near: 'Resume/CV' }, file: FILE }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt' }) },
+  { name: 'attach', page: 'apply.html', label: 'attach-nth', what: 'two "Attach" uploads: the second', want: DONE,
+    steps: [{ upload: { label: 'Attach', nth: 2 }, file: FILE }], check: async (p) => eq((await st(p)).files, { cover_letter: 'upload-sample.txt' }) },
+  { name: 'attach', page: 'apply.html', label: 'attach-heading', what: 'an upload named by the heading of its section', want: DONE,
+    steps: [{ upload: 'Cover Letter', file: FILE }], check: async (p) => eq((await st(p)).files, { cover_letter: 'upload-sample.txt' }) },
+  { name: 'attach', page: 'apply.html', label: 'attach-both', what: 'both uploads, one after the other, with the same file', want: DONE,
+    steps: [{ upload: 'Resume/CV', file: FILE }, { upload: { label: 'Attach', near: 'Cover Letter' }, file: FILE }, { click: 'Submit application', risk: 'irreversible', expect: { text: 'Attached:' } }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt', cover_letter: 'upload-sample.txt' }) && (await p.textContent('#out')).includes('cover_letter') },
+  { name: 'attach', page: 'apply.html', label: 'attach-bare', what: 'two "Attach" uploads and no hint: not for the engine to choose', want: STOP,
+    steps: [{ upload: 'Attach', file: FILE }], check: async (p, r) => eq((await st(p)).files, {}) && r.failed?.status === 'lowconf' },
+  { name: 'attach', page: 'apply.html', label: 'attach-far', what: 'a hint that fits neither upload', want: STOP,
+    steps: [{ upload: { label: 'Attach', near: 'Portfolio' }, file: FILE }], check: async (p) => eq((await st(p)).files, {}) },
+  { name: 'attach-plain', page: 'apply.html', label: 'attach-plain', what: 'the same without any group markup: heading, then "near"', want: DONE,
+    steps: [{ upload: 'Resume/CV', file: FILE }, { upload: { label: 'Attach', near: 'Cover Letter' }, file: FILE }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt', cover_letter: 'upload-sample.txt' }) },
+  { name: 'attach-slow', page: 'apply.html', what: 'the file name shows up a moment after the input is gone', want: DONE,
+    steps: [{ upload: 'Resume/CV', file: FILE }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt' }) },
+  { name: 'attach-keep', page: 'apply.html', what: 'the page empties the input and shows a chip with a remove button', want: DONE,
+    steps: [{ upload: 'Resume/CV', file: FILE }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt' }) },
+  { name: 'attach-icon', page: 'apply.html', what: 'the input is replaced by "Remove file" only, no file name', want: DONE,
+    steps: [{ upload: 'Resume/CV', file: FILE }], check: async (p) => eq((await st(p)).files, { resume: 'upload-sample.txt' }) },
+  { name: 'attach-reject', page: 'apply.html', what: 'the page refuses the file and names it in an error: that is not an upload', want: STOP,
+    steps: [{ upload: 'Resume/CV', file: FILE }], check: async (p, r) => eq((await st(p)).files, {}) && r.failed?.status === 'verify-failed' },
+  // a phone-country picker that shows only a flag and the dial code once chosen
+  { name: 'phone-code', page: 'apply.html', what: 'the chosen country is shown as a flag and "+1" only', want: DONE,
+    steps: [{ pick: 'Country', value: 'United States +1', typeText: 'United States' }, { fill: 'Phone', value: '3135550142' }, { click: 'Submit application', risk: 'irreversible', expect: { text: 'Sent:' } }], check: async (p) => eq((await st(p)).sent, { country: 'us', phone: '3135550142' }) },
+  { name: 'phone-flag', page: 'apply.html', what: 'a flag button that opens a list and collapses back into a flag', want: DONE,
+    steps: [{ pick: 'Select country', value: 'United States' }, { fill: 'Phone', value: '3135550142' }, { click: 'Submit application', risk: 'irreversible', expect: { text: 'Sent:' } }], check: async (p) => eq((await st(p)).sent, { country: 'us', phone: '3135550142' }) },
+  { name: 'phone-flag', page: 'apply.html', label: 'phone-flag-code', what: 'the same, naming the choice with its dial code', want: DONE,
+    steps: [{ pick: 'Select country', value: 'Jordan +962' }], check: async (p) => (await st(p)).country === 'jo' },
+  // "pick" on a text box that offers no suggestions at all
+  { name: 'plain', page: 'apply.html', label: 'pick-plain', what: '"pick" on a plain text field: typed in like "fill", with a warning, without a long wait', want: DONE,
+    steps: [{ pick: 'Have you previously been employed by Acme or an Acme subsidiary?', value: 'No' }, { click: 'Submit application', risk: 'irreversible', expect: { text: 'Sent:' } }], check: async (p, r) => (await st(p)).sent?.answer === 'No' && r.warnings.some((w) => /plain text field/.test(w)) && r.ms < 3500 },
+  { name: 'plain', page: 'apply.html', label: 'pick-keys', what: 'a plain-looking field whose list answers real keys only: still picked from the list', want: DONE,
+    steps: [{ pick: 'City', value: 'Amsterdam', typeText: 'Ams' }], check: async (p) => (await st(p)).city === 'Amsterdam' },
+  { name: 'keys-slow', page: 'apply.html', label: 'pick-keys-slow', what: 'the same, with a list that asks the server and takes its time', want: DONE,
+    steps: [{ pick: 'City', value: 'Amsterdam', typeText: 'Ams' }], check: async (p) => (await st(p)).city === 'Amsterdam' },
 ];
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -61,7 +99,7 @@ for (const c of CASES) {
   for (let k = 0; k < RUNS; k++) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/more.html?case=${c.name}`);
+    await page.goto(`${BASE}/${c.page || 'more.html'}?case=${c.name}`);
     const fx = new Foresight({ irreversible: 'verify', useCache: false, pageSeen: true }); fx.page = page;
     const r = await fx.run({ id: c.name, steps: c.steps }).catch((e) => ({ ok: false, reason: String(e.message) }));
     const pages = ctx.pages();

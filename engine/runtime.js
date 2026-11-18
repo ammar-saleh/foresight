@@ -113,7 +113,11 @@ export function foresightRuntime() {
   const isDisabled = (el) => el.disabled === true || el.getAttribute?.('aria-disabled') === 'true' || !!el.closest?.('fieldset:disabled');
 
   // A control that is not a text field but opens a list of choices (custom dropdown).
-  const isOpener = (el) => el.tagName !== 'INPUT' && el.tagName !== 'SELECT' && (el.getAttribute('role') === 'combobox' || /listbox|menu|true/.test(el.getAttribute('aria-haspopup') || ''));
+  // A button that says it opens something (a dialog, say) and points at a part of the page that holds a list of choices
+  // is a dropdown too: a flag button in front of a phone number, for one.
+  const opensList = (el) => { const hp = el.getAttribute('aria-haspopup'); if (!hp || hp === 'false') return false;
+    return (el.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean).some((id) => { const n = document.getElementById(id); return !!n && (n.matches('[role=listbox],[role=menu],[role=tree]') || !!n.querySelector('[role=listbox],[role=menu],[role=tree]')); }); };
+  const isOpener = (el) => el.tagName !== 'INPUT' && el.tagName !== 'SELECT' && (el.getAttribute('role') === 'combobox' || /listbox|menu|true/.test(el.getAttribute('aria-haspopup') || '') || opensList(el));
 
   // ---------- accessible names ----------
   // What a label says, leaving out the contents of controls it wraps (a dropdown's options, a text area's text).
@@ -137,7 +141,9 @@ export function foresightRuntime() {
   // Labels that are not shown (they are what the look prints for an icon-only control).
   const hiddenNames = (el) => ['aria-label', 'title'].map((a) => el.getAttribute(a)).filter(Boolean).map(flat);
   function namesOf(el) {
-    const out = [...visibleNames(el), ...hiddenNames(el)];
+    const vis = visibleNames(el), hid = hiddenNames(el);
+    // a control whose only visible "text" is a symbol (an arrow, a cross) goes by its label first
+    const out = vis.length && hid.length && vis.every((n) => !/[\p{L}\p{N}]/u.test(n)) ? [...hid, ...vis] : [...vis, ...hid];
     if (!out.length && isToggle(el)) {      // <input type=radio> High School   (text right next to it, no <label for>)
       for (const sib of [el.nextSibling, el.nextElementSibling, el.previousSibling]) {
         const tx = flat(sib?.nodeType === 3 ? sib.textContent : sib?.nodeType === 1 && !sib.matches('input,select,textarea,button') ? textOf(sib) : '');
@@ -708,6 +714,9 @@ export function foresightRuntime() {
     }
     return null;
   }
+  const bodyText = () => String(document.body?.innerText ?? '');
+  // What a control says about itself without showing it as text.
+  const saidNames = (el) => ['aria-label', 'title', 'aria-description', 'aria-valuetext'].map((a) => el.getAttribute(a)).filter(Boolean).map(norm);
   function verify(step, el) {
     switch (step.op) {
       case 'fill': return el.isContentEditable ? flat(el.textContent) === flat(step.value) : (el.value === String(step.value) || (el.value !== '' && looseEq(el.value, step.value)));
@@ -722,11 +731,15 @@ export function foresightRuntime() {
       case 'pick': {
         const want = norm(step.value); if (!want) return false;
         if (flat(el.value) && norm(el.value) === want) return true;
+        const pf = pickProof.get(el);
+        // the control was renamed to say what was chosen (a flag button: "Change country, selected United States (+1)")
+        if (pf?.name && el.isConnected && saidNames(el).some((n) => has(n, want))) return true;
+        // the field shows a short form of the choice (a flag and "+1" for "United States +1"): the same short form, still there
+        if (pf?.part && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && visible(d) && !(pf.menu.isConnected && within(d, pf.menu)) && textOf(d) === pf.part)) return true;
         if (isOpener(el) || !(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return has(norm(ownText(el)), want);          // a custom dropdown shows its choice as its own text
         // multi-value widgets clear the input and show a chip instead: the one that appeared when the choice was made
         // (pages re-draw their chips, so the proof is "where it appeared and what was already there", not one node)
-        const pf = pickProof.get(el);
-        return !!pf && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && !pf.old.has(d) && !(pf.menu.isConnected && within(d, pf.menu)) && visible(d) && sim(textOf(d), step.value) >= MATCH);
+        return !!pf && !!pf.old && pf.box.isConnected && [...pf.box.querySelectorAll('*')].some((d) => d !== el && d.children.length <= 4 && !pf.old.has(d) && !(pf.menu.isConnected && within(d, pf.menu)) && visible(d) && sim(textOf(d), step.value) >= MATCH);
       }
       default: return true;
     }
@@ -1104,7 +1117,11 @@ export function foresightRuntime() {
           const want = norm(step.value), maxLen = String(step.value).length * 2 + 24;
           const cheap = (o) => o !== el && o.nodeType === 1 && o.children.length <= 4 && o.textContent.length <= maxLen && o.textContent.trim() !== '';
           const lineOf = (o) => { for (let n = o; n && n !== document.body; n = up(n)) { if (n.nodeType === 1 && (!/^(inline|contents)$/.test(getComputedStyle(n).display) || n.matches('[role=option],[role=menuitem],li,option'))) return n; } return o; };
-          const reads = (o) => (norm(textOf(o)) === want || sim(textOf(o), step.value) >= MATCH) && visible(o) && sim(textOf(lineOf(o)), step.value) >= MATCH;
+          // the rest of an option's line may be a code or a number ("United States" + "+1", "Small" + "$5.00"), never more words
+          const plusCode = (o) => { const line = lineOf(o); if (line === o) return false; const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT); let rest = ''; for (let n = w.nextNode(); n; n = w.nextNode()) if (!o.contains(n)) rest += ' ' + n.textContent; return !/[\p{L}]/u.test(rest); };
+          // (a gap made by spacing instead of a space character is still a gap: "Jordan" "+962" reads "Jordan +962")
+          const tight = (z) => norm(z).replace(/ /g, ''), like = (o) => norm(textOf(o)) === want || sim(textOf(o), step.value) >= MATCH || tight(textOf(o)) === tight(step.value);
+          const reads = (o) => like(o) && visible(o) && (like(lineOf(o)) || plusCode(o));
           const before = new Set(qsa('*').filter((o) => cheap(o) && reads(o)));
           const wasOpen = isOpener(el) ? el.getAttribute('aria-expanded') === 'true' : !!step.typed;
           const opens = !((el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type)) || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -1113,6 +1130,8 @@ export function foresightRuntime() {
           const mo = new MutationObserver((ms) => { dirty = true; for (const m of ms) { if (m.type === 'attributes') fresh.add(m.target); else for (const n of m.addedNodes) if (n.nodeType === 1) fresh.add(n); } });
           for (const r of roots()) mo.observe(r === document ? document.documentElement : r, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open', 'aria-hidden', 'aria-expanded'] });
           let did = !!step.typed;
+          const text0 = bodyText();                         // what the page says before anything is typed
+          const empty0 = !!step.typed || !flat(el.value ?? '');   // a field that already holds an answer is never overwritten on a guess
           const typable = (el.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|file|image|reset)$/.test(el.type)) || el.tagName === 'TEXTAREA' || el.isContentEditable;
           if (typable && el.list && [...el.list.options].some((o) => sim(o.value || o.text, step.value) >= MATCH)) {      // a native list of suggestions: the value itself is the choice
             fill(el, [...el.list.options].find((o) => sim(o.value || o.text, step.value) >= MATCH).value); mo.disconnect(); watcher.disconnect(); keepHelpers();
@@ -1141,21 +1160,50 @@ export function foresightRuntime() {
           // First a short wait. If nothing shows, the engine checks whether the page asked its server for suggestions:
           // if it did we simply wait longer; if it did not, the field ignored scripted typing and real keys are tried.
           const quick = !step.typed && !opens && !step.timeout;
-          const opt = await until(find, step.timeout || (quick ? 700 : 4000));
+          // A text box that does not say it offers suggestions, on a page whose words did not change at all when it was
+          // typed into (with scripted typing, then with real keys) and that asked its server for nothing, has no list
+          // coming: waiting longer is pointless. `still` reports that for this attempt; `inert` is the engine's verdict
+          // on the attempts so far. Only for a field that was empty: replacing an answer that is already there with
+          // free text, because no suggestion matched, is not the engine's call.
+          const declares = el.getAttribute('role') === 'combobox' || ['aria-autocomplete', 'aria-haspopup', 'aria-controls', 'aria-owns', 'aria-expanded', 'list'].some((a) => el.hasAttribute(a));
+          const bare = !!step.typed && !!step.inert && typable && !declares && !step.timeout;
+          let opt = await until(find, step.timeout || (quick ? 700 : bare ? 1200 : 4000));
+          if (!opt && bare && bodyText() !== text0) opt = await until(find, 2800);
           mo.disconnect();
-          if (!opt) { watcher.disconnect(); keepHelpers(); stop('timeout', { why: isOpener(el) ? 'no choice with that text appeared' : `no suggestion matching the value appeared; the field now holds ${JSON.stringify(el.value ?? '')}`, acted: did, reacted: mutations > 0, quick, quiet: mutations === 0 }); break; }
+          const still = typable && !declares && bodyText() === text0;
+          if (!opt) { watcher.disconnect(); keepHelpers(); stop('timeout', { why: isOpener(el) ? 'no choice with that text appeared' : `no suggestion matching the value appeared; the field now holds ${JSON.stringify(el.value ?? '')}`, acted: did, reacted: mutations > 0, quick, quiet: mutations === 0, still: still && empty0, plain: bare && still }); break; }
           if (twins) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: `${twins} choices read exactly like that (perhaps under different headings): choose by css, or by a fuller text`, acted: did }); break; }
           if (isDisabled(opt) || opt.closest('[aria-disabled=true]')) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: 'that choice is switched off', acted: did }); break; }
           const already = new Set(qsa('*').filter((o) => cheap(o) && reads(o)));          // whatever reads like the value before the choice is made proves nothing afterwards
           const menu = floatRoot(opt) || opt.parentElement;
+          // for the two weaker proofs below: every word of the chosen line, what was on the page, and what the control said about itself
+          // (pages split text into pieces as they please: "+" and "1", "United States" and "+1". The line counts both as it reads and piece by piece.)
+          const wordsIn = (root) => { const out = new Set(tokens(textOf(root))), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) for (const x of tokens(n.textContent)) out.add(x); return out; };
+          const lineWords = wordsIn(lineOf(opt)), existed = new WeakSet(qsa('*')), saidBefore = saidNames(el).some((n) => has(n, want));
           pickLists.set(el, menu); pickProof.delete(el);
           pointerClick(opt); lastAct = performance.now();
           const old = new WeakSet(already);
+          const closed = () => !menu.isConnected || !visible(menu) || !opt.isConnected || !visible(opt);
+          // the list has closed and something new beside the field shows part of the chosen line and nothing else
+          const shortForm = () => {
+            if (!closed()) return null;
+            for (let n = up(el), k = 0; n && k < 4 && n !== document.body; n = up(n), k++) {
+              const d = [...n.querySelectorAll('*')].find((x) => { if (x === el || existed.has(x) || x.children.length > 4 || !visible(x) || (menu.isConnected && within(x, menu))) return false; const ws = tokens(textOf(x)); return ws.size > 0 && [...ws].every((t) => lineWords.has(t)); });
+              if (d) return { box: n, part: textOf(d) };
+            }
+            return null;
+          };
           const chipBox = () => { for (let n = up(el), k = 0; n && k < 4 && n !== document.body; n = up(n), k++) { if ([...n.querySelectorAll('*')].some((d) => cheap(d) && !already.has(d) && !(menu.isConnected && within(d, menu)) && reads(d))) return n; } return null; };
           // Proof of the choice: a chip that appears beside the field, or the field itself now showing the choice. When
           // the plan typed the whole value, the field showing it proves nothing yet, so the chip gets its chance first.
           const typedAll = !opens && norm(step.typeText ?? String(step.value).slice(0, 3)) === want;
-          await until(() => { const box = chipBox(); if (box) { pickProof.set(el, { box, old, menu }); return true; } return !typedAll && verify(step, el); }, 600);
+          await until(() => {
+            const box = chipBox(); if (box) { pickProof.set(el, { box, old, menu }); return true; }
+            if (!typedAll && verify(step, el)) return true;
+            if (!saidBefore && el.isConnected && saidNames(el).some((n) => has(n, want))) { pickProof.set(el, { name: true }); return true; }
+            const sf = shortForm(); if (sf) { pickProof.set(el, { ...sf, menu }); rec.note = `the field shows "${sf.part.slice(0, 40)}" for this choice`; return true; }
+            return false;
+          }, 600);
           if (!step.stay && !opens) el.blur();     // do not leave a suggestion menu open over the next control
         } else if (step.op === 'click' && !step.scripted) {
           // A real mouse press is on its way from the engine. Arm a guard for it and hand over the point to press.
@@ -1186,8 +1234,9 @@ export function foresightRuntime() {
       }
       if (step.op !== 'click' && !verify(step, el)) {
         // script-driven widgets update (or re-create) the control a moment later: look again, freshly resolved
-        const late = step.op === 'fill' ? false : await until(() => { const r2 = resolve(step); return !!r2.el && verify(step, r2.el); }, 700);
-        if (!late) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: step.op === 'pick' ? 'the choice was pressed but the field does not show it' : undefined, acted: true }); break; }
+        // (a control that was renamed by the choice is no longer found under its old name: the control itself is asked too)
+        const late = step.op === 'fill' ? false : await until(() => { const r2 = resolve(step); return (!!r2.el && verify(step, r2.el)) || (step.op === 'pick' && el.isConnected && verify(step, el)); }, 700);
+        if (!late) { watcher.disconnect(); keepHelpers(); stop('verify-failed', { why: step.op === 'pick' ? 'the choice was pressed but the field does not show it' : undefined, shows: step.op === 'pick' ? (ownText(up(el) || el) || undefined)?.slice(0, 80) : undefined, acted: true }); break; }
       }
       keepHelpers();
       if (step.expect) {
@@ -1300,9 +1349,13 @@ export function foresightRuntime() {
       const auto = role === 'combobox' || el.getAttribute('aria-autocomplete') || el.getAttribute('list') ? ' (autocomplete)' : '';
       lines.push(`${el.tagName === 'TEXTAREA' ? 'textarea' : `input[${t || 'text'}]`} ${q(name)}${el.value ? ` value=${q(flat(el.value).slice(0, 80))}` : ''}${auto}${el.required ? ' required' : ''}${el.readOnly ? ' readonly' : ''}${off}${pinNote(el)}`);
     }
-    for (const el of qsa('input[type=file]')) lines.push(`upload ${q(anyName(el) || 'file')}${el.multiple ? ' (several files allowed)' : ''}`);
+    { const files = qsa('input[type=file]');
+      for (const el of files) {
+        const n = anyName(el), cap = fileCaption(el, files), byCap = !!cap && sim(cap, n) < MATCH;      // the heading of its section says more than a shared button label
+        lines.push(`upload ${q(byCap ? cap : n || cap || 'file')}${byCap && n ? `  (also: ${q(n)})` : ''}${el.multiple ? ' (several files allowed)' : ''}`);
+      } }
     for (const el of qsa(EXPANDABLE)) {
-      if (!visible(el) || el.matches('input,select')) continue;
+      if (!visible(el) || el.matches('input,select') || opensList(el)) continue;
       const n = expName(el);
       if (n) lines.push(`expandable ${q(n)} (${(el.tagName === 'DETAILS' ? el.open : el.getAttribute('aria-expanded') === 'true') ? 'expanded' : 'collapsed'})`);
     }
@@ -1310,6 +1363,7 @@ export function foresightRuntime() {
     for (const el of qsa(CLICKABLE)) {
       if (!visible(el)) continue;
       let n = anyName(el); if (!n) continue;
+      if (opensList(el)) { lines.push(`dropdown ${q(n.slice(0, 80))} (custom: use "pick")${isDisabled(el) ? ' disabled' : ''}`); continue; }      // a button that opens a list of choices
       if (n.length > 150) n = n.slice(0, 150).replace(/\s+\S*$/, '') + ' …';
       // a hidden label that says more than the visible text can be used as the name too
       const more = hiddenNames(el).find((x) => visibleNames(el).length && norm(x) !== norm(n) && has(norm(x), norm(n)));
@@ -1409,19 +1463,106 @@ export function foresightRuntime() {
     return out;
   }
 
+  // Upload fields often share one button label ("Attach", "Choose file"). What tells them apart for a person is the
+  // block each one sits in: the largest part of the page that holds this upload field and no other.
+  function fileBlock(el, all) {
+    let block = null;
+    for (let n = up(el); n && n !== document.body && n !== document.documentElement; n = up(n)) {
+      if (all.some((o) => o !== el && within(o, n))) break;
+      block = n;
+    }
+    return block;
+  }
+  // ... and the heading of that block: the label of the group it is in, or the first words of the block.
+  function fileCaption(el, all) {
+    for (let n = up(el), k = 0; n && n !== document.body && k < 8; n = up(n), k++) {
+      if (all.some((o) => o !== el && within(o, n))) break;
+      const lab = (n.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean).map((id) => textOf(document.getElementById(id))).filter(Boolean).join(' ')
+        || n.getAttribute('aria-label') || (n.tagName === 'FIELDSET' ? textOf(n.querySelector('legend')) : '');
+      if (flat(lab)) return flat(lab).slice(0, 80);
+    }
+    if (all.length < 2) return '';
+    const block = fileBlock(el, all); if (!block) return '';
+    const w = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const pe = n.parentElement;
+      if (!pe || !flat(n.textContent) || !visible(pe) || pe.closest('button,a,[role=button],label[for],select,option,textarea,script,style')) continue;
+      return textOf(pe).slice(0, 80);
+    }
+    return '';
+  }
   // File inputs are usually hidden behind a styled button, so they are matched by name even when not visible.
   function locateFile(step) {
     const t = step.target, all = qsa('input[type=file]');
-    if (t.css) { let els = []; try { els = qsa(t.css).filter((e) => e.matches('input[type=file]')); } catch { return { found: false, why: 'the css selector is not valid' }; } return els.length === 1 ? { found: true, css: cssPath(els[0]), p: 0.99 } : { found: false, count: els.length }; }
+    // "the 2nd": by where a person sees each field (its nearest visible box), top to bottom, then left to right
+    const order = (list) => {
+      const box = (e) => { let b = e; while (b && !visible(b)) b = up(b); return (b || e).getBoundingClientRect(); };
+      return [...list].sort((a, b) => { const ra = box(a), rb = box(b); return Math.abs(ra.top - rb.top) > 4 ? ra.top - rb.top : Math.abs(ra.left - rb.left) > 4 ? ra.left - rb.left : (a.compareDocumentPosition(b) & 4 ? -1 : 1); });
+    };
+    // "near" and "nth" choose among upload fields that fit the name equally well; they never replace the name
+    const narrow = (cands) => {
+      let c = cands;
+      if (t.near) c = c.filter((e) => nearFactor(e, t.near, (o) => cands.includes(o)) === 1);
+      if (t.nth) { const o = order(c), pick = t.nth > 0 ? o[t.nth - 1] : o[o.length + t.nth]; c = pick ? [pick] : []; }
+      return c;
+    };
+    const label = (e) => { const c = fileCaption(e, all), n = anyName(e); return c && sim(c, n) < MATCH ? `${n || 'file input'} in "${c.slice(0, 40)}"` : n || c || 'file input'; };
+    if (t.css) {
+      let els = []; try { els = qsa(t.css).filter((e) => e.matches('input[type=file]')); } catch { return { found: false, why: 'the css selector is not valid' }; }
+      if (els.length > 1 && (t.near || t.nth)) els = narrow(els);
+      return els.length === 1 ? { found: true, css: cssPath(els[0]), p: 0.99, multiple: els[0].multiple } : { found: false, count: els.length };
+    }
     const want = t.label ?? t.text;
-    const scoreOf = (el) => Math.max(0, ...namesOf(el).map((n) => sim(n, want)), ...weakNames(el).map((n) => sim(n, want) * 0.8), sim(nearbyLabel(el), want) * 0.94, sim(textOf(up(el) || el), want) * 0.85);
+    const scoreOf = (el) => Math.max(0, ...namesOf(el).map((n) => sim(n, want)), ...weakNames(el).map((n) => sim(n, want) * 0.8), sim(nearbyLabel(el), want) * 0.94, sim(textOf(up(el) || el), want) * 0.85, sim(fileCaption(el, all), want) * 0.97);
     const scored = all.map((el) => [el, scoreOf(el)]).sort((a, b) => b[1] - a[1]);
     if (!scored.length) return { found: false, count: 0 };
-    const [el, sc] = scored[0], margin = sc - (scored[1]?.[1] ?? 0);
+    const closest = scored.slice(0, 5).map(([e, x]) => `${label(e)} (${x.toFixed(2)})`);
+    const [el, sc] = scored[0];
+    if ((t.near || t.nth) && sc >= MATCH) {
+      const ties = scored.filter(([, x]) => x >= sc - 0.001).map(([e]) => e), left = narrow(ties);
+      if (left.length === 1) return { found: true, css: cssPath(left[0]), p: sc, closest, multiple: left[0].multiple, picked: ties.length > 1 ? `${ties.length} upload fields are named "${anyName(left[0]).slice(0, 40)}"; used the one ${t.near ? `near "${t.near}"` : `counted ${t.nth > 0 ? t.nth : ties.length + t.nth + 1} of ${ties.length}`}${fileCaption(left[0], all) ? ` ("${fileCaption(left[0], all).slice(0, 40)}")` : ''}` : undefined };
+      return { found: true, css: cssPath(el), p: 0.5, closest, why: left.length ? 'several upload fields with that name are near those words' : t.near ? 'no upload field with that name is near those words' : `there are only ${ties.length} upload fields with that name` };
+    }
     const named = namesOf(el).length > 0 || !!nearbyLabel(el);
     // the only upload field on the page is the upload field, unless it carries a name that says it is for something else
     const p = scored.length === 1 ? (!named ? Math.max(sc, 0.95) : sc) : (scored[1][1] < MATCH ? sc : 0.5);
-    return { found: true, css: cssPath(el), p, closest: scored.slice(0, 5).map(([e, x]) => `${anyName(e) || 'file input'} (${x.toFixed(2)})`), multiple: el.multiple };
+    return { found: true, css: cssPath(el), p, closest, multiple: el.multiple, why: p === 0.5 && sc >= MATCH ? 'several upload fields have that name: add "near" (words of its section) or "nth", or use the section heading as the name' : undefined };
+  }
+  // Proof of an upload. Many pages take the file and then swap the <input> for the file's name and a remove button,
+  // so "the input holds the file" cannot be the only proof. Before the file is set the engine notes what the field's
+  // block looks like; afterwards one of these must be true:
+  //   - the input holds the files;
+  //   - the input is gone and the file's name now shows on the page, or a control to remove/replace the file appeared in its block;
+  //   - the input is still there but empty, the file's name now shows AND a new control appeared in its block
+  //     (a page that rejects a file may name it in an error message, so the name alone is not enough there).
+  const UNDO = /(^|[^\p{L}])(remove|delete|clear|replace|change|discard|entfernen|löschen|supprimer|retirer|eliminar|quitar|rimuovi|verwijderen|удалить|إزالة|حذف)([^\p{L}]|$)/iu;
+  const shownTimes = (name) => {
+    const hay = String(document.body?.innerText || '').toLowerCase(), low = name.toLowerCase(), stem = low.replace(/\.[^.]+$/, '');
+    const count = (x) => (x ? hay.split(x).length - 1 : 0);
+    return [count(low), stem.length >= 4 ? count(stem) : 0, stem.length >= 14 ? count(stem.slice(0, 12)) : 0];      // whole name / without extension / cut short by the page
+  };
+  let uploadMark = null;
+  function markUpload(css, names) {
+    const el = qsa(css)[0]; if (!el) return false;
+    const all = qsa('input[type=file]');
+    let block = fileBlock(el, all);
+    if (all.length < 2) { block = el; for (let k = 0; k < 4 && up(block) && up(block) !== document.body; k++) block = up(block); }      // the only upload field: its near surroundings
+    uploadMark = { el, block, names, had: new WeakSet(block ? [block, ...block.querySelectorAll('*')] : []), before: names.map(shownTimes) };
+    return true;
+  }
+  function uploadProof() {
+    const m = uploadMark; if (!m) return { ok: false };
+    const held = m.el.isConnected && m.el.files ? [...m.el.files].map((f) => f.name) : null;
+    if (held && held.length === m.names.length && m.names.every((n) => held.includes(n))) return { ok: true, by: 'input' };
+    const shown = m.names.every((n, i) => shownTimes(n).some((x, k) => x > m.before[i][k]));
+    const block = m.block && m.block.isConnected ? m.block : null;
+    const fresh = block ? [...block.querySelectorAll(CLICKABLE)].filter((o) => !m.had.has(o) && visible(o)) : [];
+    const gone = !m.el.isConnected && !(block && block.querySelector('input[type=file]'));
+    const undo = fresh.find((o) => UNDO.test([...namesOf(o), textOf(o)].join(' ')));
+    if (gone && shown) return { ok: true, by: 'name', note: 'the page replaced the upload field with the file\'s name' };
+    if (gone && undo) return { ok: true, by: 'control', note: `the page replaced the upload field with "${(anyName(undo) || textOf(undo)).slice(0, 40)}"` };
+    if (!gone && shown && fresh.length) return { ok: true, by: 'name', note: 'the page emptied the upload field and now shows the file\'s name' };
+    return { ok: false, held, gone, shown, appeared: fresh.map((o) => (anyName(o) || textOf(o)).slice(0, 40)).filter(Boolean).slice(0, 4) };
   }
   const fileNames = (css) => { const el = qsa(css)[0]; return el && el.files ? [...el.files].map((f) => f.name) : null; };
   // Text of what a target points at, for plans that need to read something back.
@@ -1470,7 +1611,7 @@ export function foresightRuntime() {
   const focusInfo = () => { const a = deepActive(); return { editable: !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) && a.readOnly !== true && !isDisabled(a), tag: a?.tagName?.toLowerCase() || null, name: a && a !== document.body ? anyName(a).slice(0, 60) : '' }; };
 
   window.__FS = {
-    version: 12, dialogs: () => noteDialogs().map((d) => ({ tag: d.tagName.toLowerCase(), id: d.id || undefined, modal: isModal(d), ...infoOf(d), holdsWork: holdsWork(d) })), seen: () => { markShown(); return true; }, track, unit: { sim, has: (h, n) => has(norm(h), norm(n)), looseEq }, begin, acted, helperBlocks, pressing: () => { lastAct = performance.now(); keyFocus = deepActive(); return true; }, carry: (pressed) => { if (pressed) pressedBefore = true; return true; }, keysSafe, armAt, leaving: () => performance.now() - leavingAt < 4000, finishClick, disarm: () => { const g = disarm(); if (g) g.watcher.disconnect(); return true; }, frameText, locateFile, fileNames, read, scrollPage, boxOf, pageText, drifted, consume: acted, observe, tables, find, locate, quiet, ready, focusInfo, runWindow, audit, dismissInterrupt, fingerprint,
+    version: 13, dialogs: () => noteDialogs().map((d) => ({ tag: d.tagName.toLowerCase(), id: d.id || undefined, modal: isModal(d), ...infoOf(d), holdsWork: holdsWork(d) })), seen: () => { markShown(); return true; }, track, unit: { sim, has: (h, n) => has(norm(h), norm(n)), looseEq }, begin, acted, helperBlocks, pressing: () => { lastAct = performance.now(); keyFocus = deepActive(); return true; }, carry: (pressed) => { if (pressed) pressedBefore = true; return true; }, keysSafe, armAt, leaving: () => performance.now() - leavingAt < 4000, finishClick, disarm: () => { const g = disarm(); if (g) g.watcher.disconnect(); return true; }, frameText, locateFile, fileNames, markUpload, uploadProof, bodyText, read, scrollPage, boxOf, pageText, drifted, consume: acted, observe, tables, find, locate, quiet, ready, focusInfo, runWindow, audit, dismissInterrupt, fingerprint,
     check: (step) => { const r = resolve(step); return !!r.el && verify(step, r.el); },
     expect: (e) => until(() => expectMet(e), e.timeout || 5000).then(Boolean),
     expectNow: (e) => expectMet(e),

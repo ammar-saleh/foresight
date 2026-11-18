@@ -356,7 +356,7 @@ export class Foresight {
       for (const r of recs) {
         const m = (memo.steps[r.i] ||= { a: 0, b: 0 });
         if (r.warn) stats.warnings.push(`step ${r.i}: ${r.warn}`);
-        if (r.note) stats.notes.push(`step ${r.i}: ${r.note}`);
+        if (r.note && !stats.notes.includes(`step ${r.i}: ${r.note}`)) stats.notes.push(`step ${r.i}: ${r.note}`);      // (a step that was tried again says it once)
         if (r.css) cssOf[r.i] = r.css;
         if (r.status === 'ok') {
           m.a++; done.add(r.i); lastOk = r;
@@ -497,11 +497,24 @@ export class Foresight {
           } else if (s.op === 'pick' && failed.quick) {
             stats.repairs.push({ at: failed.i, kind: 'careful-retry' });
             stats.roundTrips += 3;
+            const reqT = page.__fsReq, said = await target.evaluate(() => window.__FS.bodyText()).catch(() => null);
             await target.locator(failed.css).first().click({ timeout: 3000 });
             await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.type(s.typeText ?? String(s.value).slice(0, 3));
-            s.typed = true; continue;                       // the runtime now waits (the full time) for the suggestion and picks it
+            await page.waitForTimeout(150);
+            // Did typing change anything? Scripted typing left the page's words as they were (`still`); did real keys, and did the page ask its server for anything?
+            s.typed = true; s.inert = !!failed.still && said != null && page.__fsReq === reqT && (await target.evaluate(() => window.__FS.bodyText()).catch(() => '')) === said;
+            continue;                                       // the runtime now waits for the suggestion and picks it
           }
         } catch {}
+      }
+      if (failed.status === 'timeout' && s.op === 'pick' && failed.plain && !s.plainTried && s.risk !== 'irreversible' && failed.css) {
+        // A text box that declares no suggestions, on a page that asked its server for nothing and whose words did not
+        // change when it was typed into, is a plain text box: the value is typed in and read back, exactly as "fill"
+        // does, and the result says so. (If anything at all appeared, the page does answer typing and the run stops.)
+        stats.repairs.push({ at: failed.i, kind: 'pick-as-fill' });
+        stats.warnings.push(`step ${failed.i}: this is a plain text field with no suggestion list, so "pick" typed the value in like "fill"`);
+        s.plainTried = true; s.op = 'fill'; delete s.typed; delete s.typeText; delete s.inert;
+        continue;
       }
       if (!(await this.escalate(steps, failed, stats))) return fail(failed, `${failed.status} at step ${failed.i}`);
     }
@@ -672,12 +685,22 @@ export class Foresight {
         if (missing.length) return { ...rec, status: 'nofile', why: `file not found: ${missing.join(', ')}` };
         const loc = await target.evaluate(([st]) => window.__FS.locateFile(st), [step]);
         if (!loc.found) return { ...rec, status: 'notfound', why: loc.why || (loc.count === 0 ? 'this page has no file-upload field' : 'no upload field matches that name'), closest: loc.closest };
-        if (loc.p < need) return { ...rec, status: 'lowconf', p: +loc.p.toFixed(3), closest: loc.closest };
+        if (loc.p < need) return { ...rec, status: 'lowconf', p: +loc.p.toFixed(3), why: loc.why, closest: loc.closest };
         if (step.file.length > 1 && !loc.multiple) return { ...rec, status: 'error', why: 'this upload field accepts one file only', acted: false };
+        if (loc.picked) stats.notes.push(`step ${step.i}: ${loc.picked}`);
+        const wanted = step.file.map((f) => path.basename(f));
+        await target.evaluate(([c, n]) => window.__FS.markUpload(c, n), [loc.css, wanted]);
         acted = true;
         await target.locator(loc.css).first().setInputFiles(step.file, { timeout: 5000 });
-        const names = await target.evaluate((c) => window.__FS.fileNames(c), loc.css).catch(() => null);
-        if (!names || !(names.length === step.file.length && step.file.every((f) => names.includes(path.basename(f))))) return { ...rec, status: 'verify-failed', why: 'the upload field does not hold the file', got: names, acted: true };
+        // the input holds the file, or the page swapped the input for the file's name / a remove button (it may take a moment to)
+        let proof = { ok: false };
+        for (const end = Date.now() + 4000; ;) {
+          proof = await target.evaluate(() => window.__FS.uploadProof()).catch(() => ({ ok: false }));
+          if (proof.ok || Date.now() > end) break;
+          await page.waitForTimeout(150);
+        }
+        if (!proof.ok) return { ...rec, status: 'verify-failed', why: proof.gone ? 'the upload field is gone and the page does not show the file\'s name: look at the page' : 'the upload field does not hold the file and the page does not show it as attached', got: proof.held ?? null, appeared: proof.appeared?.length ? proof.appeared : undefined, acted: true };
+        if (proof.note) stats.notes.push(`step ${step.i}: ${proof.note}`);
       }
       else if (step.op === 'drag') {
         const find = async (tg) => target.evaluate(([st]) => window.__FS.locate(st), [this.prep({ ...step, op: 'click', target: tg }, memo)]);

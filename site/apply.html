@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Job application cases</title><link rel="stylesheet" href="style.css">
+<style>
+.grp{margin:18px 0}.grp .label,.grp h3{font-weight:600;margin:0 0 8px;font-size:15px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pill{border-radius:999px;padding:8px 16px}
+.chosen{display:flex;gap:10px;align-items:center;padding:8px 0}.fname{font-weight:600}
+.hint{color:var(--muted);font-size:13px;margin:6px 0 0}.err{color:var(--bad);font-size:14px;margin:6px 0 0}
+.phone{display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:end;max-width:560px}
+.sel{position:relative}.ctl{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:0 8px;background:var(--field);min-height:40px}
+.ctl input{border:0;outline:0;background:transparent;width:100%;min-width:20px;padding:8px 2px}
+.single{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.flag{width:20px;height:14px;border-radius:2px;background:linear-gradient(#b22234 0 33%,#fff 33% 66%,#3c3b6e 66%)}
+.flag.globe{background:var(--muted)}.flag.jo{background:linear-gradient(#000 0 33%,#fff 33% 66%,#007a3d 66%)}.flag.ca{background:linear-gradient(90deg,#d52b1e 0 25%,#fff 25% 75%,#d52b1e 75%)}
+.menu{position:absolute;left:0;top:calc(100% + 4px);z-index:30;min-width:260px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;max-height:220px;overflow:auto}
+.opt{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer}.opt:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.iti{position:relative;display:flex;gap:8px;align-items:center}.iti button.cc{display:flex;gap:6px;align-items:center;padding:9px 10px}
+.iti .dd{position:absolute;left:0;top:calc(100% + 4px);z-index:30;width:300px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:8px}
+.iti .dd ul{list-style:none;margin:8px 0 0;padding:0;max-height:200px;overflow:auto}
+.iti .dd li{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer}.iti .dd li .dial{color:var(--muted);margin-left:4px}
+.hide{display:none!important}
+.out{margin:14px 0 0;min-height:1.4em}
+</style></head>
+<body>
+<main><div class="card"><h1 id="case-title">Apply for this job</h1><form id="app" onsubmit="return false"></form><div id="log" class="sub"></div></div></main>
+<script>
+// Local copies of patterns found on real job-application forms (two "Attach" buttons, an upload field that turns into
+// the file's name, a phone-country picker that shows only a flag and a dial code, a plain text question).
+const $ = (s, r = document) => r.querySelector(s), app = $('#app');
+const c = new URLSearchParams(location.search).get('case') || '';
+window.__harm = null; window.__state = { files: {} };
+const harm = (what) => { window.__harm = what; $('#log').textContent = 'HARM: ' + what; };
+const field = (label, id, extra = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="text" ${extra}></div>`;
+const COUNTRIES = [['us', 'United States', '+1'], ['ca', 'Canada', '+1'], ['jo', 'Jordan', '+962'], ['gb', 'United Kingdom', '+44'], ['um', 'United States Minor Outlying Islands', '+1']];
+
+// ---- upload fields: a visible "Attach" button, a hidden <input type=file> labelled "Attach" too
+function uploadGroup(id, title, aria) {
+  const head = aria ? `<div id="lbl-${id}" class="label">${title}</div>` : `<h3>${title}</h3>`;
+  return `<div class="grp upl" data-id="${id}" ${aria ? `role="group" aria-labelledby="lbl-${id}"` : ''}>${head}<div class="wrap"></div></div>`;
+}
+function drawUpload(g, mode) {
+  const id = g.dataset.id, wrap = $('.wrap', g);
+  wrap.innerHTML = `<div class="btns"><div><button type="button" class="pill attach">Attach</button><label class="vh" for="${id}">Attach</label><input id="${id}" class="vh" type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></div><button type="button" class="pill">Dropbox</button><button type="button" class="pill">Enter manually</button></div><p class="hint">Accepted file types: pdf, doc, docx, txt, rtf</p>`;
+  $('.attach', wrap).onclick = () => $('#' + id).click();
+  $('#' + id).addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (mode === 'reject') {                                  // the page refuses the file: the input is emptied and an error names the file
+      e.target.value = ''; let er = $('.err', wrap); if (!er) { er = document.createElement('p'); er.className = 'err'; er.setAttribute('role', 'alert'); wrap.append(er); }
+      er.textContent = `${f.name} could not be uploaded. Try a smaller file.`; return;
+    }
+    window.__state.files[id] = f.name;
+    const remove = () => { delete window.__state.files[id]; drawUpload(g, mode); };
+    if (mode === 'keep') {                                    // the input stays (emptied, so the same file can be chosen again); a chip shows the file
+      e.target.value = ''; $('.chosen', wrap)?.remove();
+      const chip = document.createElement('div'); chip.className = 'chosen'; chip.innerHTML = `<span class="fname"></span><button type="button" aria-label="Remove file">×</button>`;
+      $('.fname', chip).textContent = f.name; $('button', chip).onclick = remove; wrap.prepend(chip); return;
+    }
+    setTimeout(() => {                                        // the usual: the input is replaced by the file's name and a remove button
+      wrap.innerHTML = mode === 'icon' ? `<div class="chosen"><span>1 file attached</span><button type="button" aria-label="Remove file">×</button></div>`
+        : `<div class="chosen"><span class="fname"></span><button type="button" aria-label="Remove file">×</button></div>`;
+      if ($('.fname', wrap)) $('.fname', wrap).textContent = f.name;
+      $('button', wrap).onclick = remove;
+    }, mode === 'slow' ? 900 : 0);
+  });
+}
+function uploads(mode, aria = true) {
+  app.innerHTML = field('First Name', 'first') + uploadGroup('resume', 'Resume/CV', aria) + uploadGroup('cover_letter', 'Cover Letter', aria) + `<div class="actions"><button type="button" id="send">Submit application</button></div><div id="out" class="out" role="status"></div>`;
+  for (const g of app.querySelectorAll('.upl')) drawUpload(g, mode);
+  $('#send').onclick = () => { $('#out').textContent = 'Attached: ' + JSON.stringify(window.__state.files); };
+}
+
+// the last step of every case: it must only ever happen once, and only with the form as the plan left it
+function sendButton() { $('#send').onclick = () => { if (window.__state.sent) { harm('submitted twice'); return; } window.__state.sent = { country: window.__state.country, phone: $('#phone')?.value, answer: $('#prev')?.value }; $('#out').textContent = 'Sent: ' + JSON.stringify(window.__state.sent); }; }
+
+// ---- phone: a "Country" search box (react-select style) that shows only a flag and the dial code once chosen
+function phoneSelect() {
+  app.innerHTML = `<fieldset class="phone"><legend class="vh">Phone</legend>
+    <div class="sel"><label id="country-label" for="country">Country</label>
+      <div class="ctl"><div class="value"></div><input id="country" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" aria-labelledby="country-label" autocomplete="off"><button type="button" aria-label="Toggle flyout" tabindex="-1">▾</button></div></div>
+    <div class="field"><label for="phone">Phone</label><input id="phone" type="tel"></div></fieldset><div class="actions"><button type="button" id="send">Submit application</button></div><div id="out" class="out" role="status"></div>`;
+  sendButton();
+  const inp = $('#country'), sel = $('.sel');
+  const close = () => { $('.menu', sel)?.remove(); inp.setAttribute('aria-expanded', 'false'); };
+  const open = () => {
+    close(); const q = inp.value.trim().toLowerCase();
+    const m = document.createElement('div'); m.className = 'menu'; m.setAttribute('role', 'listbox'); m.id = 'country-list';
+    for (const [code, name, dial] of COUNTRIES.filter(([, n]) => n.toLowerCase().includes(q))) {
+      const o = document.createElement('div'); o.className = 'opt'; o.setAttribute('role', 'option'); o.innerHTML = `<div class="flag ${code}"></div>`; o.append(`${name} ${dial}`);
+      o.addEventListener('mousedown', (e) => e.preventDefault());
+      // as on the real form: the chosen value is a flag and the dial code, and the code is written as two pieces of text ("+" and "1")
+      o.onclick = () => { window.__state.country = code; inp.value = ''; $('.value', sel).innerHTML = `<div class="single"><div class="flag ${code}"></div><span></span></div>`; $('.single span', sel).append('+', dial.slice(1)); close(); };
+      m.append(o);
+    }
+    sel.append(m); inp.setAttribute('aria-expanded', 'true');
+  };
+  inp.addEventListener('input', open); inp.addEventListener('focus', open); inp.addEventListener('blur', () => setTimeout(close, 150));
+}
+
+// ---- phone: a flag button (intl-tel-input style) that opens a search box and a list, then collapses back into the flag
+function phoneFlag() {
+  app.innerHTML = `<div class="field" style="max-width:420px"><label for="phone">Phone</label><div class="iti">
+      <button type="button" class="cc" aria-expanded="false" aria-label="Select country" aria-haspopup="dialog" aria-controls="dd" title="Select country"><div class="flag globe"></div><span aria-hidden="true">▾</span></button>
+      <div id="dd" class="dd hide" role="dialog" aria-modal="true"><input type="search" placeholder="Search" role="combobox" aria-label="Search" aria-controls="cl" aria-autocomplete="list" autocomplete="off"><ul id="cl" role="listbox" aria-label="List of countries"></ul></div>
+      <input id="phone" type="tel"></div></div><div class="actions"><button type="button" id="send">Submit application</button></div><div id="out" class="out" role="status"></div>`;
+  sendButton();
+  const btn = $('.cc'), dd = $('#dd'), ul = $('#cl'), search = $('input[type=search]', dd);
+  const draw = () => { const q = search.value.trim().toLowerCase(); ul.innerHTML = '';
+    for (const [code, name, dial] of COUNTRIES.filter(([, n]) => n.toLowerCase().includes(q))) {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.innerHTML = `<div class="flag ${code}"></div><span class="name">${name}</span><span class="dial" dir="ltr">${dial}</span>`;
+      li.onclick = () => { window.__state.country = code; dd.classList.add('hide'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-label', `Change country, selected ${name} (${dial})`); btn.title = name; $('.flag', btn).className = 'flag ' + code; };
+      ul.append(li);
+    } };
+  btn.onclick = () => { const openNow = dd.classList.toggle('hide') === false; btn.setAttribute('aria-expanded', String(openNow)); if (openNow) { search.value = ''; draw(); search.focus(); } };
+  search.addEventListener('input', draw);
+}
+
+// ---- a plain text question, and two fields that do offer suggestions but only to real key presses
+function questions(kind) {
+  app.innerHTML = field('Have you previously been employed by Acme or an Acme subsidiary?', 'prev') + field('City', 'city', 'autocomplete="off"') + `<div class="sel" id="sugg"></div><div class="actions"><button type="button" id="send">Submit application</button></div><div id="out" class="out" role="status"></div>`;
+  sendButton();
+  $('#prev').addEventListener('input', (e) => { window.__state.answer = e.target.value; });
+  const CITIES = ['Amman', 'Amsterdam', 'Austin'];
+  const show = () => { const q = $('#city').value.trim().toLowerCase(), box = $('#sugg'); box.innerHTML = ''; if (!q) return;
+    const m = document.createElement('div'); m.className = 'menu';
+    for (const n of CITIES.filter((x) => x.toLowerCase().startsWith(q))) { const o = document.createElement('div'); o.className = 'opt'; o.textContent = n; o.addEventListener('mousedown', (e) => e.preventDefault()); o.onclick = () => { $('#city').value = n; window.__state.city = n; box.innerHTML = ''; }; m.append(o); }
+    box.append(m); };
+  $('#city').addEventListener('input', () => { window.__state.typedCity = $('#city').value; });
+  // the list answers real key presses only; in the "slow" kind it first asks the server and then takes its time
+  $('#city').addEventListener('keyup', async (e) => { if (!e.isTrusted) return; if (kind === 'slow') { await fetch('style.css?suggest=' + encodeURIComponent($('#city').value)).catch(() => {}); await new Promise((r) => setTimeout(r, 1600)); } show(); });
+}
+
+const CASES = {
+  attach: () => uploads('swap'), 'attach-slow': () => uploads('slow'), 'attach-plain': () => uploads('swap', false), 'attach-keep': () => uploads('keep'),
+  'attach-icon': () => uploads('icon'), 'attach-reject': () => uploads('reject'),
+  'phone-code': phoneSelect, 'phone-flag': phoneFlag, plain: () => questions('keys'), 'keys-slow': () => questions('slow'),
+};
+(CASES[c] || (() => { app.textContent = 'unknown case'; }))();
+</script>
+</body></html>

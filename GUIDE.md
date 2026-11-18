@@ -33,7 +33,8 @@ foresight sessions | recipes | forget <recipe> | guide
 - `CONTROLS` lists fields, checkboxes, dropdowns and buttons with their **current state**:
   `value="..."`, `(checked)`, `(selected: ...)`, `disabled`, `(collapsed)`.
 - `dropdown "..." (custom: use "pick")` is a non-native dropdown: use `pick`, not `select`.
-- `upload "..."` is a file-upload field.
+- `upload "..."` is a file-upload field. When several upload fields share one button label, each is listed by the
+  heading of its section: `upload "Resume/CV"  (also: "Attach")`. Either name works; a shared one needs `near` or `nth`.
 - `pressable "-- Select --" beside "Nationality"` is something you can press that is not built as a button (often a
   home-made dropdown). Click it by its text (`{"click": {"text": "-- Select --", "near": "Nationality"}}`), then click
   the choice that appears; or use `pick` on it by `css`.
@@ -73,15 +74,15 @@ A JSON file: `{ "steps": [ ... ] }`. Step numbers start at 0. One action per ste
 |---|---|
 | `{"fill": "First name", "value": "Layla"}` | type into a text field / textarea / date / number / colour / slider / rich-text editor |
 | `{"select": "Country", "value": "Jordan"}` | choose in a native dropdown. For a `select (multiple)`, give a list: `"value": ["A", "C"]` (selects exactly those) |
-| `{"pick": "Country", "value": "Canada"}` | custom dropdown: opens it and chooses the option with that text. On a field with a native suggestion list it simply sets the value |
-| `{"pick": "From", "value": "Amman, Jordan (AMM)", "typeText": "Amm"}` | autocomplete: types `typeText`, waits for the suggestion whose text is exactly `value`, chooses it, and checks that the field (or a chip beside it) now shows it |
+| `{"pick": "Country", "value": "Canada"}` | custom dropdown: opens it and chooses the option with that text. A code or number after the option's name is fine ("Canada" chooses "Canada +1"). On a field with a native suggestion list it simply sets the value. On an empty plain text field with no suggestions at all it types the value like `fill` and says so under `warnings` |
+| `{"pick": "From", "value": "Amman, Jordan (AMM)", "typeText": "Amm"}` | autocomplete: types `typeText`, waits for the suggestion whose text is exactly `value`, chooses it, and checks that the field (or a chip beside it) now shows it. A field that shows only a short form of the choice (a flag and "+1" for "United States +1") counts too, and `notes` says what it shows |
 | `{"check": "I agree"}` / `{"uncheck": "Newsletter"}` | tick / untick a checkbox or switch (does nothing if already in that state) |
 | `{"radio": "Pizza Size", "value": "Medium"}` | choose a radio option; the first string is the group name shown in the look |
 | `{"click": "Submit"}` | click a button, link, tab, field, or any element with exactly that text |
 | `{"dblclick": "Buy milk"}` / `{"rightclick": "Report.pdf"}` | real double-click / right-click |
 | `{"hover": "Account"}` | move the real mouse over something (menus that open on hover) |
 | `{"expand": "Home"}` | open a collapsed tree node / accordion / details (`expandable "..."` in the look). Only the node's own header or arrow is ever pressed; if it has neither, the run stops and you click the right part by `css` |
-| `{"upload": "Resume", "file": "C:/docs/cv.pdf"}` | attach a file to an upload field (a list of paths for several files) |
+| `{"upload": "Resume", "file": "C:/docs/cv.pdf"}` | attach a file to an upload field (a list of paths for several files). Two fields with the same name: `{"upload": {"label": "Attach", "near": "Cover Letter"}, ...}` or `"nth": 2`. The upload counts when the field holds the file, or when the page swaps the field for the file's name or a remove button |
 | `{"drag": "Task A", "to": "Done"}` | drag one thing onto another with the real mouse |
 | `{"scroll": "down", "expect": {"text": "Item 90"}}` | keep scrolling (`down`, `up`, `top`, `bottom`) until the expectation is true: for lists that load as you scroll |
 | `{"keys": "Enter"}` | press a real key (`Enter`, `Tab`, `Escape`, `ArrowDown`, `Control+A` ...) in the focused element |
@@ -123,7 +124,7 @@ The target is the value of the action. It is either a name, or an object. `near`
 - `{"check": {"label": "Toggle Todo", "near": "Write report"}}` = the control named "Toggle Todo" in the row/card that mentions "Write report".
   The words must be on the same line as the control, or be the title of the small card it sits in. If that row has no
   such control the run stops; it never takes the one from a neighbouring row.
-- `{"click": {"text": "Delete", "nth": 2}}` = the 2nd of several identical targets, counting from 1 in page order (`-1` = last). Works with `css` too, and with `radio` for unlabeled radios.
+- `{"click": {"text": "Delete", "nth": 2}}` = the 2nd of several identical targets, counting from 1 in page order (`-1` = last). Works with `css` too, with `radio` for unlabeled radios, and with `upload` (as does `near`).
 - `{"fill": {"row": "SKU-104", "col": "On hand"}, "value": "3"}` = a cell in a table, by row key (the first column) and column header (merged header cells are handled).
 - Checkboxes and radios with no label are named by the text right next to them, or by their `value`.
 
